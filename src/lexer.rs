@@ -1,5 +1,5 @@
 #[derive(Debug, Clone)]
-pub enum Token {
+pub enum TokenType {
     Number(usize),
     String(String),
     Plus,
@@ -52,7 +52,7 @@ impl Lexer {
         Lexer { input }
     }
 
-    pub fn tokenize(self) -> Vec<Token> {
+    pub fn tokenize(self) -> Vec<TokenType> {
         let mut tokens = Vec::new();
         let mut iter = self.input.chars().peekable();
 
@@ -69,14 +69,14 @@ impl Lexer {
                         }
                     }
                     match buf.as_str() {
-                        "exit" => tokens.push(Token::Exit),
-                        "let" => tokens.push(Token::Let),
-                        "if" => tokens.push(Token::If),
-                        "els" => tokens.push(Token::Els),
-                        "elsif" => tokens.push(Token::ElsIf),
-                        "while" => tokens.push(Token::While),
-                        "for" => tokens.push(Token::For),
-                        _ => tokens.push(Token::Ident(buf)),
+                        "exit" => tokens.push(TokenType::Exit),
+                        "let" => tokens.push(TokenType::Let),
+                        "if" => tokens.push(TokenType::If),
+                        "els" => tokens.push(TokenType::Els),
+                        "elsif" => tokens.push(TokenType::ElsIf),
+                        "while" => tokens.push(TokenType::While),
+                        "for" => tokens.push(TokenType::For),
+                        _ => tokens.push(TokenType::Ident(buf)),
                     }
                 }
                 '0'..='9' => {
@@ -90,7 +90,7 @@ impl Lexer {
                         }
                     }
                     let num = number.parse().unwrap();
-                    tokens.push(Token::Number(num));
+                    tokens.push(TokenType::Number(num));
                 }
                 '\"' => {
                     iter.next();
@@ -115,31 +115,31 @@ impl Lexer {
                             }
                         }
                     }
-                    tokens.push(Token::String(string));
+                    tokens.push(TokenType::String(string));
                 }
                 '(' => {
-                    tokens.push(Token::OpenParen);
+                    tokens.push(TokenType::OpenParen);
                     iter.next();
                 }
                 ')' => {
-                    tokens.push(Token::CloseParen);
+                    tokens.push(TokenType::CloseParen);
                     iter.next();
                 }
                 '{' => {
-                    tokens.push(Token::OpenCurly);
+                    tokens.push(TokenType::OpenCurly);
                     iter.next();
                 }
                 '}' => {
-                    tokens.push(Token::CloseCurly);
+                    tokens.push(TokenType::CloseCurly);
                     iter.next();
                 }
                 '+' => {
                     iter.next();
                     if *iter.peek().unwrap() == '+' {
                         iter.next();
-                        tokens.push(Token::DPlue);
+                        tokens.push(TokenType::DPlue);
                     } else {
-                        tokens.push(Token::Plus);
+                        tokens.push(TokenType::Plus);
                     }
                 }
                 '-' => {
@@ -147,17 +147,17 @@ impl Lexer {
                     match *iter.peek().unwrap() {
                         '-' => {
                             iter.next();
-                            tokens.push(Token::DMinus);
+                            tokens.push(TokenType::DMinus);
                         }
                         '>' => {
                             iter.next();
-                            tokens.push(Token::ThinArrow);
+                            tokens.push(TokenType::ThinArrow);
                         }
-                        _ => tokens.push(Token::Minus),
+                        _ => tokens.push(TokenType::Minus),
                     }
                 }
                 '*' => {
-                    tokens.push(Token::Multiply);
+                    tokens.push(TokenType::Multiply);
                     iter.next();
                 }
                 '/' => {
@@ -167,61 +167,61 @@ impl Lexer {
                             iter.next();
                         }
                     } else {
-                        tokens.push(Token::Divide);
+                        tokens.push(TokenType::Divide);
                     }
                 }
                 '=' => {
                     iter.next();
                     if *iter.peek().unwrap() == '=' {
-                        tokens.push(Token::EquEqu);
+                        tokens.push(TokenType::EquEqu);
                         iter.next();
                     } else {
-                        tokens.push(Token::Equal);
+                        tokens.push(TokenType::Equal);
                     }
                 }
                 '!' => {
                     iter.next();
                     if *iter.peek().unwrap() == '=' {
-                        tokens.push(Token::NotEqu);
+                        tokens.push(TokenType::NotEqu);
                         iter.next();
                     } else {
-                        tokens.push(Token::Bang);
+                        tokens.push(TokenType::Bang);
                     }
                 }
                 '>' => {
                     iter.next();
                     if *iter.peek().unwrap() == '=' {
-                        tokens.push(Token::GreatEqu);
+                        tokens.push(TokenType::GreatEqu);
                         iter.next();
                     } else {
-                        tokens.push(Token::Greater);
+                        tokens.push(TokenType::Greater);
                     }
                 }
 
                 '<' => {
                     iter.next();
                     if *iter.peek().unwrap() == '=' {
-                        tokens.push(Token::LessEqu);
+                        tokens.push(TokenType::LessEqu);
                         iter.next();
                     } else {
-                        tokens.push(Token::Less);
+                        tokens.push(TokenType::Less);
                     }
                 }
                 '.' => {
                     iter.next();
                     if *iter.peek().unwrap() == '.' {
-                        tokens.push(Token::DDot);
+                        tokens.push(TokenType::DDot);
                         iter.next();
                     } else {
-                        tokens.push(Token::Dot);
+                        tokens.push(TokenType::Dot);
                     }
                 }
                 ',' => {
                     iter.next();
-                    tokens.push(Token::Comma);
+                    tokens.push(TokenType::Comma);
                 }
                 ';' => {
-                    tokens.push(Token::Semi);
+                    tokens.push(TokenType::Semi);
                     iter.next();
                 }
                 _ => {

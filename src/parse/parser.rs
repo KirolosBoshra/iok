@@ -1,4 +1,4 @@
-use crate::lexer::Token;
+use crate::lexer::TokenType;
 
 #[derive(Debug, Clone)]
 pub enum Tree {
@@ -6,8 +6,8 @@ pub enum Tree {
     Ident(String),
     Empty(),
     String(String),
-    BinOp(Box<Tree>, Token, Box<Tree>),
-    CmpOp(Box<Tree>, Token, Box<Tree>),
+    BinOp(Box<Tree>, TokenType, Box<Tree>),
+    CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Inc(String),
     Dec(String),
     Exit(Box<Tree>),
@@ -36,11 +36,11 @@ pub enum Tree {
 }
 
 pub struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<TokenType>,
 }
 
 impl Parser {
-    pub fn new(tokens: &Vec<Token>) -> Self {
+    pub fn new(tokens: &Vec<TokenType>) -> Self {
         Parser {
             tokens: tokens.to_vec(),
         }
@@ -59,28 +59,28 @@ impl Parser {
 
     fn parse_expression(
         &mut self,
-        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+        iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>,
     ) -> Tree {
         let mut left = self.parse_term(iter);
 
         while let Some(op) = iter.peek().cloned() {
             match op {
-                Token::Plus | Token::Minus => {
+                TokenType::Plus | TokenType::Minus => {
                     iter.next();
                     let right = self.parse_term(iter);
                     left = Tree::BinOp(Box::new(left), op.clone(), Box::new(right));
                 }
-                Token::EquEqu | Token::NotEqu => {
+                TokenType::EquEqu | TokenType::NotEqu => {
                     iter.next();
                     let right = self.parse_expression(iter);
                     left = Tree::CmpOp(Box::new(left), op.clone(), Box::new(right));
                 }
-                Token::Greater | Token::GreatEqu | Token::Less | Token::LessEqu => {
+                TokenType::Greater | TokenType::GreatEqu | TokenType::Less | TokenType::LessEqu => {
                     iter.next();
                     let right = self.parse_expression(iter);
                     left = Tree::CmpOp(Box::new(left), op.clone(), Box::new(right));
                 }
-                Token::DDot => {
+                TokenType::DDot => {
                     iter.next();
                     let right = self.parse_expression(iter);
                     left = Tree::CmpOp(Box::new(left), op.clone(), Box::new(right));
@@ -92,12 +92,12 @@ impl Parser {
         left
     }
 
-    fn parse_term(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_term(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>) -> Tree {
         let mut left = self.parse_factor(iter);
 
         while let Some(op) = iter.peek().cloned() {
             match op {
-                Token::Multiply | Token::Divide => {
+                TokenType::Multiply | TokenType::Divide => {
                     iter.next();
                     let right = self.parse_factor(iter);
                     left = Tree::BinOp(Box::new(left), op.clone(), Box::new(right));
@@ -109,15 +109,15 @@ impl Parser {
     }
     fn parse_block(
         &mut self,
-        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+        iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>,
     ) -> Vec<Tree> {
         let mut body = vec![];
         match iter.peek().unwrap() {
-            Token::OpenCurly => {
+            TokenType::OpenCurly => {
                 iter.next();
                 while let Some(token) = iter.peek() {
                     match token {
-                        Token::CloseCurly => {
+                        TokenType::CloseCurly => {
                             iter.next();
                             break;
                         }
@@ -136,10 +136,10 @@ impl Parser {
     //
     // fn parse_paren_expr(
     //     &mut self,
-    //     iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+    //     iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>,
     // ) -> Tree {
     //     match iter.next().unwrap() {
-    //         Token::OpenParen => {
+    //         TokenType::OpenParen => {
     //             let expr = self.parse_expression(iter);
     //             iter.next();
     //             expr
@@ -148,14 +148,14 @@ impl Parser {
     //     }
     // }
 
-    // fn parse_args(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
+    // fn parse_args(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>) -> Tree {
     //     let mut vec_buffer: Vec<Tree> = vec![];
     //     while let Some(next) = iter.peek().cloned() {
     //         match next {
-    //             Token::Comma => {
+    //             TokenType::Comma => {
     //                 iter.next();
     //             }
-    //             Token::CloseParen => {
+    //             TokenType::CloseParen => {
     //                 iter.next();
     //                 break;
     //             }
@@ -167,20 +167,20 @@ impl Parser {
 
     fn next_case(
         &mut self,
-        iter: &mut std::iter::Peekable<std::slice::Iter<'_, Token>>,
+        iter: &mut std::iter::Peekable<std::slice::Iter<'_, TokenType>>,
         els: &mut Vec<Tree>,
         els_ifs: &mut Vec<Tree>,
     ) {
         if !iter.peek().is_none() {
             match iter.peek().unwrap() {
-                Token::Els => {
+                TokenType::Els => {
                     iter.next();
                     if !els.is_empty() {
                         panic!("Excessive else statements")
                     }
                     *els = self.parse_block(iter);
                 }
-                Token::ElsIf => {
+                TokenType::ElsIf => {
                     iter.next();
                     let expr = Box::new(self.parse_expression(iter));
                     let body = self.parse_block(iter);
@@ -192,27 +192,30 @@ impl Parser {
         }
     }
 
-    fn parse_factor(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_factor(
+        &mut self,
+        iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>,
+    ) -> Tree {
         match iter.next().unwrap() {
-            Token::Number(num) => Tree::Number(*num),
+            TokenType::Number(num) => Tree::Number(*num),
             // [TODO] this cursed but it's annoying
-            Token::Ident(string) => match iter.peek().unwrap_or(&&Token::Empty) {
-                Token::Equal => {
+            TokenType::Ident(string) => match iter.peek().unwrap_or(&&TokenType::Empty) {
+                TokenType::Equal => {
                     iter.next();
                     let expr = self.parse_expression(iter);
                     Tree::Assign(string.to_string(), Box::new(expr))
                 }
-                Token::DPlue => {
+                TokenType::DPlue => {
                     iter.next();
                     Tree::Inc(string.to_string())
                 }
-                Token::DMinus => {
+                TokenType::DMinus => {
                     iter.next();
                     Tree::Dec(string.to_string())
                 }
                 _ => Tree::Ident(string.to_string()),
             },
-            Token::String(string) => Tree::String(
+            TokenType::String(string) => Tree::String(
                 // i could use a crate for that  ig if i wanna use unicodes
                 string
                     .to_string()
@@ -221,13 +224,17 @@ impl Parser {
                     .replace("\\r", "\r")
                     .replace("\\\"", "\""),
             ),
-            Token::Plus => self.parse_factor(iter),
-            Token::Minus => {
+            TokenType::Plus => self.parse_factor(iter),
+            TokenType::Minus => {
                 let factor = self.parse_factor(iter);
-                Tree::BinOp(Box::new(Tree::Number(0)), Token::Minus, Box::new(factor))
+                Tree::BinOp(
+                    Box::new(Tree::Number(0)),
+                    TokenType::Minus,
+                    Box::new(factor),
+                )
             }
-            Token::OpenParen => match iter.peek().unwrap() {
-                Token::CloseParen => {
+            TokenType::OpenParen => match iter.peek().unwrap() {
+                TokenType::CloseParen => {
                     iter.next();
                     let expr = Tree::Empty;
                     expr()
@@ -235,14 +242,14 @@ impl Parser {
                 _ => {
                     let expr = self.parse_expression(iter);
                     match iter.next().unwrap() {
-                        Token::CloseParen => expr,
+                        TokenType::CloseParen => expr,
                         _ => panic!("Expected closing parenthesis"),
                     }
                 }
             },
-            Token::Let => match iter.next().unwrap() {
-                Token::Ident(var) => match iter.next().unwrap() {
-                    Token::Equal => {
+            TokenType::Let => match iter.next().unwrap() {
+                TokenType::Ident(var) => match iter.next().unwrap() {
+                    TokenType::Equal => {
                         let expr = self.parse_expression(iter);
                         Tree::Let(var.to_string(), Box::new(expr))
                     }
@@ -250,7 +257,7 @@ impl Parser {
                 },
                 _ => panic!("Expected identifier after 'let'"),
             },
-            Token::If => {
+            TokenType::If => {
                 let mut els = vec![];
                 let mut els_ifs = vec![];
                 let expr = Box::new(self.parse_expression(iter));
@@ -263,18 +270,18 @@ impl Parser {
                     els_ifs,
                 }
             }
-            Token::While => {
+            TokenType::While => {
                 let expr = Box::new(self.parse_expression(iter));
                 let body = self.parse_block(iter);
                 Tree::While { expr, body }
             }
-            Token::For => match iter.next().unwrap() {
+            TokenType::For => match iter.next().unwrap() {
                 // TODO Syntax not Confirmed yet
                 // for x -> 12 {}
                 // for x..12 {}
                 // for let x =-> 12
-                Token::Ident(var) => match iter.peek().unwrap() {
-                    Token::ThinArrow => {
+                TokenType::Ident(var) => match iter.peek().unwrap() {
+                    TokenType::ThinArrow => {
                         iter.next();
                         let expr = Box::new(self.parse_expression(iter));
                         let body = self.parse_block(iter);
@@ -286,7 +293,7 @@ impl Parser {
                     }
                     _ => panic!("Expected ->"),
                 },
-                Token::OpenParen => {
+                TokenType::OpenParen => {
                     let expr = Box::new(self.parse_expression(iter));
                     iter.next();
                     let body = self.parse_block(iter);
@@ -294,11 +301,11 @@ impl Parser {
                 }
                 _ => panic!("Expected (Expr) or Var -> expr..expr"),
             },
-            Token::Exit => {
+            TokenType::Exit => {
                 let expr = self.parse_factor(iter);
                 Tree::Exit(Box::new(expr))
             }
-            Token::Els | Token::ElsIf => panic!("Expected If statement first"),
+            TokenType::Els | TokenType::ElsIf => panic!("Expected If statement first"),
             _ => panic!("Invalid factor"),
         }
     }
