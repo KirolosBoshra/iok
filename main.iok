@@ -7,9 +7,9 @@ for x -> i+2 {
   a++
 }
 
-if x > y {
+if x > y { 
   exit(x)
-} elsif x == y {
+} elsif x == y { 
   exit(1)
 } els {
   exit(y)

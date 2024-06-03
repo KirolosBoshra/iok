@@ -1,9 +1,11 @@
+use std::{iter::Peekable, str::Chars};
+
 #[derive(Debug, Clone)]
 pub enum TokenType {
     Number(usize),
     String(String),
     Plus,
-    DPlue,
+    DPlus,
     Minus,
     DMinus,
     Multiply,
@@ -33,203 +35,320 @@ pub enum TokenType {
     ElsIf,
     While,
     For,
-    Empty,
+    // Empty,
 }
 
-// struct Loc {
-//     x: usize,
-//     y: usize,
-// }
-
-// $$ TODO : add loc to the token
+#[derive(Debug, Clone, Copy)]
+pub struct Loc {
+    pub x: usize,
+    pub y: usize,
+}
 
 #[derive(Debug, Clone)]
-pub struct Lexer {
-    input: String,
+pub struct Token {
+    pub token: TokenType,
+    pub loc: Loc,
 }
-impl Lexer {
-    pub fn new(input: String) -> Lexer {
-        Lexer { input }
+
+#[derive(Debug, Clone)]
+pub struct Lexer<'a> {
+    curr_loc: Loc,
+    iter: Peekable<Chars<'a>>,
+}
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a String) -> Lexer<'a> {
+        let iter = input.chars().peekable();
+        Lexer {
+            curr_loc: Loc { x: 1, y: 0 },
+            iter,
+        }
     }
 
-    pub fn tokenize(self) -> Vec<TokenType> {
-        let mut tokens = Vec::new();
-        let mut iter = self.input.chars().peekable();
+    pub fn tokenize(&mut self) -> Vec<Token> {
+        let mut tokens: Vec<Token> = Vec::new();
 
-        while let Some(&c) = iter.peek() {
+        while let Some(&c) = self.iter.peek() {
             match c {
                 'a'..='z' | '_' | 'A'..='Z' => {
                     let mut buf = String::new();
-                    while let Some(&c) = iter.peek() {
+                    while let Some(&c) = self.iter.peek() {
                         if c.is_alphanumeric() || c == '_' {
                             buf.push(c);
-                            iter.next();
+                            self.next();
                         } else {
                             break;
                         }
                     }
                     match buf.as_str() {
-                        "exit" => tokens.push(TokenType::Exit),
-                        "let" => tokens.push(TokenType::Let),
-                        "if" => tokens.push(TokenType::If),
-                        "els" => tokens.push(TokenType::Els),
-                        "elsif" => tokens.push(TokenType::ElsIf),
-                        "while" => tokens.push(TokenType::While),
-                        "for" => tokens.push(TokenType::For),
-                        _ => tokens.push(TokenType::Ident(buf)),
+                        "exit" => tokens.push(Token {
+                            token: TokenType::Exit,
+                            loc: self.curr_loc,
+                        }),
+                        "let" => tokens.push(Token {
+                            token: TokenType::Let,
+                            loc: self.curr_loc,
+                        }),
+                        "if" => tokens.push(Token {
+                            token: TokenType::If,
+                            loc: self.curr_loc,
+                        }),
+                        "els" => tokens.push(Token {
+                            token: TokenType::Els,
+                            loc: self.curr_loc,
+                        }),
+                        "elsif" => tokens.push(Token {
+                            token: TokenType::ElsIf,
+                            loc: self.curr_loc,
+                        }),
+                        "while" => tokens.push(Token {
+                            token: TokenType::While,
+                            loc: self.curr_loc,
+                        }),
+                        "for" => tokens.push(Token {
+                            token: TokenType::For,
+                            loc: self.curr_loc,
+                        }),
+                        _ => tokens.push(Token {
+                            token: TokenType::Ident(buf),
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
                 '0'..='9' => {
                     let mut number = String::new();
-                    while let Some(&c) = iter.peek() {
+                    while let Some(&c) = self.iter.peek() {
                         if c.is_digit(10) {
                             number.push(c);
-                            iter.next();
+                            self.next();
                         } else {
                             break;
                         }
                     }
                     let num = number.parse().unwrap();
-                    tokens.push(TokenType::Number(num));
+                    tokens.push(Token {
+                        token: TokenType::Number(num),
+                        loc: self.curr_loc,
+                    });
                 }
                 '\"' => {
-                    iter.next();
+                    self.next();
                     let mut string = String::new();
-                    while let Some(&c) = iter.peek() {
+                    while let Some(&c) = self.iter.peek() {
                         match c {
                             '\"' => {
-                                iter.next();
+                                self.next();
                                 break;
                             }
                             '\\' => {
                                 string.push(c);
-                                iter.next();
-                                if *iter.peek().unwrap() == '\"' {
+                                self.next();
+                                if *self.iter.peek().unwrap() == '\"' {
                                     string.push('\"');
-                                    iter.next();
+                                    self.next();
                                 }
                             }
                             _ => {
                                 string.push(c);
-                                iter.next();
+                                self.next();
                             }
                         }
                     }
-                    tokens.push(TokenType::String(string));
+                    tokens.push(Token {
+                        token: TokenType::String(string),
+                        loc: self.curr_loc,
+                    });
                 }
                 '(' => {
-                    tokens.push(TokenType::OpenParen);
-                    iter.next();
+                    tokens.push(Token {
+                        token: TokenType::OpenParen,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
                 ')' => {
-                    tokens.push(TokenType::CloseParen);
-                    iter.next();
+                    tokens.push(Token {
+                        token: TokenType::CloseParen,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
                 '{' => {
-                    tokens.push(TokenType::OpenCurly);
-                    iter.next();
+                    tokens.push(Token {
+                        token: TokenType::OpenCurly,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
                 '}' => {
-                    tokens.push(TokenType::CloseCurly);
-                    iter.next();
+                    tokens.push(Token {
+                        token: TokenType::CloseCurly,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
                 '+' => {
-                    iter.next();
-                    if *iter.peek().unwrap() == '+' {
-                        iter.next();
-                        tokens.push(TokenType::DPlue);
+                    self.next();
+                    if *self.iter.peek().unwrap() == '+' {
+                        self.next();
+                        tokens.push(Token {
+                            token: TokenType::DPlus,
+                            loc: self.curr_loc,
+                        });
                     } else {
-                        tokens.push(TokenType::Plus);
+                        tokens.push(Token {
+                            token: TokenType::Plus,
+                            loc: self.curr_loc,
+                        });
                     }
                 }
                 '-' => {
-                    iter.next();
-                    match *iter.peek().unwrap() {
+                    self.next();
+                    match *self.iter.peek().unwrap() {
                         '-' => {
-                            iter.next();
-                            tokens.push(TokenType::DMinus);
+                            self.next();
+                            tokens.push(Token {
+                                token: TokenType::DMinus,
+                                loc: self.curr_loc,
+                            });
                         }
                         '>' => {
-                            iter.next();
-                            tokens.push(TokenType::ThinArrow);
+                            self.next();
+                            tokens.push(Token {
+                                token: TokenType::ThinArrow,
+                                loc: self.curr_loc,
+                            });
                         }
-                        _ => tokens.push(TokenType::Minus),
+                        _ => tokens.push(Token {
+                            token: TokenType::Minus,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
                 '*' => {
-                    tokens.push(TokenType::Multiply);
-                    iter.next();
+                    tokens.push(Token {
+                        token: TokenType::Multiply,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
                 '/' => {
-                    iter.next();
-                    if *iter.peek().unwrap() == '/' {
-                        while *iter.peek().unwrap() != '\n' {
-                            iter.next();
+                    self.next();
+                    if *self.iter.peek().unwrap() == '/' {
+                        while *self.iter.peek().unwrap() != '\n' {
+                            self.next();
                         }
                     } else {
-                        tokens.push(TokenType::Divide);
+                        tokens.push(Token {
+                            token: TokenType::Divide,
+                            loc: self.curr_loc,
+                        });
                     }
                 }
                 '=' => {
-                    iter.next();
-                    if *iter.peek().unwrap() == '=' {
-                        tokens.push(TokenType::EquEqu);
-                        iter.next();
+                    self.next();
+                    if *self.iter.peek().unwrap() == '=' {
+                        tokens.push(Token {
+                            token: TokenType::EquEqu,
+                            loc: self.curr_loc,
+                        });
+                        self.next();
                     } else {
-                        tokens.push(TokenType::Equal);
+                        tokens.push(Token {
+                            token: TokenType::Equal,
+                            loc: self.curr_loc,
+                        });
                     }
                 }
                 '!' => {
-                    iter.next();
-                    if *iter.peek().unwrap() == '=' {
-                        tokens.push(TokenType::NotEqu);
-                        iter.next();
+                    self.next();
+                    if *self.iter.peek().unwrap() == '=' {
+                        tokens.push(Token {
+                            token: TokenType::NotEqu,
+                            loc: self.curr_loc,
+                        });
+                        self.next();
                     } else {
-                        tokens.push(TokenType::Bang);
+                        tokens.push(Token {
+                            token: TokenType::Bang,
+                            loc: self.curr_loc,
+                        });
                     }
                 }
                 '>' => {
-                    iter.next();
-                    if *iter.peek().unwrap() == '=' {
-                        tokens.push(TokenType::GreatEqu);
-                        iter.next();
+                    self.next();
+                    if *self.iter.peek().unwrap() == '=' {
+                        tokens.push(Token {
+                            token: TokenType::GreatEqu,
+                            loc: self.curr_loc,
+                        });
+                        self.next();
                     } else {
-                        tokens.push(TokenType::Greater);
+                        tokens.push(Token {
+                            token: TokenType::Greater,
+                            loc: self.curr_loc,
+                        });
                     }
                 }
 
                 '<' => {
-                    iter.next();
-                    if *iter.peek().unwrap() == '=' {
-                        tokens.push(TokenType::LessEqu);
-                        iter.next();
+                    self.next();
+                    if *self.iter.peek().unwrap() == '=' {
+                        tokens.push(Token {
+                            token: TokenType::LessEqu,
+                            loc: self.curr_loc,
+                        });
+                        self.next();
                     } else {
-                        tokens.push(TokenType::Less);
+                        tokens.push(Token {
+                            token: TokenType::Less,
+                            loc: self.curr_loc,
+                        });
                     }
                 }
                 '.' => {
-                    iter.next();
-                    if *iter.peek().unwrap() == '.' {
-                        tokens.push(TokenType::DDot);
-                        iter.next();
+                    self.next();
+                    if *self.iter.peek().unwrap() == '.' {
+                        tokens.push(Token {
+                            token: TokenType::DDot,
+                            loc: self.curr_loc,
+                        });
+                        self.next();
                     } else {
-                        tokens.push(TokenType::Dot);
+                        tokens.push(Token {
+                            token: TokenType::Dot,
+                            loc: self.curr_loc,
+                        });
                     }
                 }
                 ',' => {
-                    iter.next();
-                    tokens.push(TokenType::Comma);
+                    self.next();
+                    tokens.push(Token {
+                        token: TokenType::Comma,
+                        loc: self.curr_loc,
+                    });
                 }
                 ';' => {
-                    tokens.push(TokenType::Semi);
-                    iter.next();
+                    tokens.push(Token {
+                        token: TokenType::Semi,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
+                }
+                '\n' => {
+                    self.curr_loc.x = 1;
+                    self.curr_loc.y += 1;
+                    self.iter.next();
                 }
                 _ => {
-                    iter.next();
+                    self.next();
                 }
             }
         }
 
         tokens
+    }
+    fn next(&mut self) {
+        self.curr_loc.x += 1;
+        self.iter.next();
     }
 }

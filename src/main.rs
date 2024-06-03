@@ -25,7 +25,7 @@ fn main() {
     let mut file = File::open(file_name).expect(&format!("Can't open file {file_name}"));
     file.read_to_string(&mut input).expect("can't read file");
 
-    let lexer = Lexer::new(input);
+    let mut lexer = Lexer::new(&input);
     let tokens = lexer.tokenize();
 
     let mut parser = Parser::new(&tokens);
