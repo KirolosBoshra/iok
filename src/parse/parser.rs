@@ -292,7 +292,7 @@ impl Parser {
                     let body = self.parse_block(iter);
                     Tree::While { expr, body }
                 }
-                _ => panic!("Expected (Expr) or Var -> (expr..expr)"),
+                _ => panic!("Expected (Expr) or Var -> expr..expr"),
             },
             Token::Exit => {
                 let expr = self.parse_factor(iter);

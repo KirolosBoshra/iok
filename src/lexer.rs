@@ -10,7 +10,7 @@ pub enum Token {
     Divide,
     Equal,
     EquEqu,
-    ExMark,
+    Bang,
     NotEqu,
     Greater,
     Less,
@@ -36,7 +36,7 @@ pub enum Token {
     Empty,
 }
 
-// struct Vec2 {
+// struct Loc {
 //     x: usize,
 //     y: usize,
 // }
@@ -185,7 +185,7 @@ impl Lexer {
                         tokens.push(Token::NotEqu);
                         iter.next();
                     } else {
-                        tokens.push(Token::ExMark);
+                        tokens.push(Token::Bang);
                     }
                 }
                 '>' => {
