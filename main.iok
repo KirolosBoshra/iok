@@ -1,0 +1,20 @@
+let a = "A7A"
+let x = 1
+
+let k = x + a
+
+for x -> i+2 {
+  a++
+}
+
+if x > y {
+  exit(x)
+} elsif x == y {
+  exit(1)
+} els {
+  exit(y)
+}
+
+while x > 0 {
+  k++
+}
