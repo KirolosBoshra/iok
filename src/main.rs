@@ -1,4 +1,5 @@
 mod lexer;
+mod logger;
 mod parse;
 
 use lexer::Lexer;

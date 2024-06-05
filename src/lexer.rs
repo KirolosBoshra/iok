@@ -1,5 +1,7 @@
 use std::{iter::Peekable, str::Chars};
 
+use crate::logger::{ErrorType, Logger};
+
 #[derive(Debug, Clone)]
 pub enum TokenType {
     Number(usize),
@@ -339,7 +341,15 @@ impl<'a> Lexer<'a> {
                     self.curr_loc.y += 1;
                     self.iter.next();
                 }
+                ' ' | '\t' | '\r' => {
+                    self.next();
+                }
                 _ => {
+                    Logger::error(
+                        &format!("Unexpected Token: {c}"),
+                        self.curr_loc,
+                        ErrorType::Lexing,
+                    );
                     self.next();
                 }
             }

@@ -1,6 +1,10 @@
 use crate::lexer::{Token, TokenType};
+use crate::logger::{ErrorType, Logger};
 use core::panic;
 use std::iter::Peekable;
+
+// TODO add Tree Erorr so that the interpreter Print it later
+// and remove panic!'s
 
 #[derive(Debug, Clone)]
 pub enum Tree {
@@ -125,10 +129,7 @@ impl Parser {
                     }
                 }
             }
-            _ => {
-                eprintln!("Expected {{ in line {}", iter.peek().unwrap().loc.y,);
-                panic!("Parseing Error");
-            }
+            _ => Logger::error("Expected {{", iter.peek().unwrap().loc, ErrorType::Parsing),
         }
         body
     }
@@ -176,9 +177,15 @@ impl Parser {
                 TokenType::Els => {
                     iter.next();
                     if !els.is_empty() {
-                        panic!("Excessive else statements")
+                        Logger::error(
+                            "Unexpecte els statements",
+                            iter.peek().unwrap().loc,
+                            ErrorType::Parsing,
+                        );
+                        panic!("Excessive els statements")
                     }
                     *els = self.parse_block(iter);
+                    self.next_case(iter, els, els_ifs);
                 }
                 TokenType::ElsIf => {
                     iter.next();
@@ -193,9 +200,9 @@ impl Parser {
     }
 
     fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
-        match &iter.next().unwrap().token {
+        let it = iter.next().unwrap();
+        match &it.token {
             TokenType::Number(num) => Tree::Number(*num),
-            // [TODO] this cursed but it's annoying
             TokenType::Ident(string) => match iter.peek().unwrap().token {
                 TokenType::Equal => {
                     iter.next();
@@ -240,7 +247,14 @@ impl Parser {
                     let expr = self.parse_expression(iter);
                     match iter.next().unwrap().token {
                         TokenType::CloseParen => expr,
-                        _ => panic!("Expected closing parenthesis"),
+                        _ => {
+                            Logger::error(
+                                "Expected closing parenthesis",
+                                it.loc,
+                                ErrorType::Parsing,
+                            );
+                            panic!("Expected closing parenthesis")
+                        }
                     }
                 }
             },
@@ -250,9 +264,23 @@ impl Parser {
                         let expr = self.parse_expression(iter);
                         Tree::Let(var.to_string(), Box::new(expr))
                     }
-                    _ => panic!("Expected '=' after identifier in let statement"),
+                    _ => {
+                        Logger::error(
+                            "Expected '=' after identifier in let statement",
+                            it.loc,
+                            ErrorType::Parsing,
+                        );
+                        panic!("Expected '=' after identifier in let statement")
+                    }
                 },
-                _ => panic!("Expected identifier after 'let'"),
+                _ => {
+                    Logger::error(
+                        "Expected identifier after 'let'",
+                        it.loc,
+                        ErrorType::Parsing,
+                    );
+                    panic!("Expected identifier after 'let'")
+                }
             },
             TokenType::If => {
                 let mut els = vec![];
@@ -302,7 +330,10 @@ impl Parser {
                 let expr = self.parse_factor(iter);
                 Tree::Exit(Box::new(expr))
             }
-            TokenType::Els | TokenType::ElsIf => panic!("Expected If statement first"),
+            TokenType::Els | TokenType::ElsIf => {
+                Logger::error("Expected If statement first", it.loc, ErrorType::Parsing);
+                panic!("Expected If statement first")
+            }
             _ => panic!("Invalid factor"),
         }
     }
