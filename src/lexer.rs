@@ -59,7 +59,7 @@ impl<'a> Lexer<'a> {
     pub fn new(input: &'a String) -> Lexer<'a> {
         let iter = input.chars().peekable();
         Lexer {
-            curr_loc: Loc { x: 1, y: 0 },
+            curr_loc: Loc { x: 1, y: 1 },
             iter,
         }
     }

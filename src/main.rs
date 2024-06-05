@@ -21,6 +21,8 @@ fn main() {
         }
     });
 
+    // TODO add Logger for both Error and Warinings
+
     let mut input = String::new();
     let mut file = File::open(file_name).expect(&format!("Can't open file {file_name}"));
     file.read_to_string(&mut input).expect("can't read file");
@@ -28,8 +30,8 @@ fn main() {
     let mut lexer = Lexer::new(&input);
     let tokens = lexer.tokenize();
 
-    let mut parser = Parser::new(&tokens);
+    let mut parser = Parser::new(tokens);
 
-    println!("{:?}\n\n", tokens);
+    // println!("{:?}\n\n", tokens);
     println!("{:?}", parser.parse_tokens());
 }

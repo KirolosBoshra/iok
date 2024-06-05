@@ -37,15 +37,16 @@ pub enum Tree {
     },
 }
 
+// TODO change Every match iter.peek to while let
+// TODO add curr_loc here too and change it every expr
+
 pub struct Parser {
     tokens: Vec<Token>,
 }
 
 impl Parser {
-    pub fn new(tokens: &Vec<Token>) -> Self {
-        Parser {
-            tokens: tokens.to_vec(),
-        }
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Parser { tokens }
     }
     pub fn parse_tokens(&mut self) -> Vec<Tree> {
         let tokens_clone = self.tokens.clone();
@@ -125,11 +126,7 @@ impl Parser {
                 }
             }
             _ => {
-                eprintln!(
-                    "Expected {{ line: {}:{}",
-                    iter.peek().unwrap().loc.y,
-                    iter.peek().unwrap().loc.x
-                );
+                eprintln!("Expected {{ in line {}", iter.peek().unwrap().loc.y,);
                 panic!("Parseing Error");
             }
         }
