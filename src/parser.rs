@@ -15,8 +15,6 @@ pub enum Tree {
     String(String),
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
-    Inc(String),
-    Dec(String),
     Exit(Box<Tree>),
     Let(String, Box<Tree>),
     Assign(String, Box<Tree>),
@@ -221,11 +219,25 @@ impl Parser {
                         }
                         TokenType::DPlus => {
                             iter.next();
-                            tree = Tree::Inc(string.to_string());
+                            tree = Tree::Assign(
+                                string.to_string(),
+                                Box::new(Tree::BinOp(
+                                    Box::new(Tree::Ident(string.to_string())),
+                                    TokenType::Plus,
+                                    Box::new(Tree::Number(1.0)),
+                                )),
+                            );
                         }
                         TokenType::DMinus => {
                             iter.next();
-                            tree = Tree::Dec(string.to_string())
+                            tree = Tree::Assign(
+                                string.to_string(),
+                                Box::new(Tree::BinOp(
+                                    Box::new(Tree::Ident(string.to_string())),
+                                    TokenType::Minus,
+                                    Box::new(Tree::Number(1.0)),
+                                )),
+                            );
                         }
                         _ => break,
                     }
