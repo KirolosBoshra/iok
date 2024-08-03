@@ -204,7 +204,7 @@ impl<'a> Lexer<'a> {
                 }
                 '+' => {
                     self.next();
-                    if *self.iter.peek().unwrap() == '+' {
+                    if *self.iter.peek().unwrap_or(&' ') == '+' {
                         self.next();
                         tokens.push(Token {
                             token: TokenType::DPlus,
@@ -262,7 +262,7 @@ impl<'a> Lexer<'a> {
                 }
                 '=' => {
                     self.next();
-                    if *self.iter.peek().unwrap() == '=' {
+                    if *self.iter.peek().unwrap_or(&' ') == '=' {
                         tokens.push(Token {
                             token: TokenType::EquEqu,
                             loc: self.curr_loc,
@@ -277,7 +277,7 @@ impl<'a> Lexer<'a> {
                 }
                 '!' => {
                     self.next();
-                    if *self.iter.peek().unwrap() == '=' {
+                    if *self.iter.peek().unwrap_or(&' ') == '=' {
                         tokens.push(Token {
                             token: TokenType::NotEqu,
                             loc: self.curr_loc,
@@ -292,7 +292,7 @@ impl<'a> Lexer<'a> {
                 }
                 '>' => {
                     self.next();
-                    if *self.iter.peek().unwrap() == '=' {
+                    if *self.iter.peek().unwrap_or(&' ') == '=' {
                         tokens.push(Token {
                             token: TokenType::GreatEqu,
                             loc: self.curr_loc,
@@ -308,7 +308,7 @@ impl<'a> Lexer<'a> {
 
                 '<' => {
                     self.next();
-                    if *self.iter.peek().unwrap() == '=' {
+                    if *self.iter.peek().unwrap_or(&' ') == '=' {
                         tokens.push(Token {
                             token: TokenType::LessEqu,
                             loc: self.curr_loc,
@@ -323,7 +323,7 @@ impl<'a> Lexer<'a> {
                 }
                 '.' => {
                     self.next();
-                    if *self.iter.peek().unwrap() == '.' {
+                    if *self.iter.peek().unwrap_or(&' ') == '.' {
                         tokens.push(Token {
                             token: TokenType::DDot,
                             loc: self.curr_loc,
