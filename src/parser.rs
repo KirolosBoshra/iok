@@ -8,7 +8,8 @@ use std::iter::Peekable;
 
 #[derive(Debug, Clone)]
 pub enum Tree {
-    Number(usize),
+    Number(f64),
+    Bool(bool),
     Ident(String),
     Empty(),
     String(String),
@@ -203,22 +204,34 @@ impl Parser {
         let it = iter.next().unwrap();
         match &it.token {
             TokenType::Number(num) => Tree::Number(*num),
-            TokenType::Ident(string) => match iter.peek().unwrap().token {
-                TokenType::Equal => {
-                    iter.next();
-                    let expr = self.parse_expression(iter);
-                    Tree::Assign(string.to_string(), Box::new(expr))
+            TokenType::Bool(b) => Tree::Bool(*b),
+            TokenType::Null => Tree::Empty(),
+            TokenType::Bang => {
+                let expr = self.parse_expression(iter);
+                Tree::CmpOp(Box::new(expr), TokenType::Bang, Box::new(Tree::Empty()))
+            }
+            TokenType::Ident(string) => {
+                let mut tree = Tree::Ident(string.clone());
+                while let Some(op) = iter.peek().cloned() {
+                    match &op.token {
+                        TokenType::Equal => {
+                            iter.next();
+                            let expr = self.parse_expression(iter);
+                            tree = Tree::Assign(string.to_string(), Box::new(expr));
+                        }
+                        TokenType::DPlus => {
+                            iter.next();
+                            tree = Tree::Inc(string.to_string());
+                        }
+                        TokenType::DMinus => {
+                            iter.next();
+                            tree = Tree::Dec(string.to_string())
+                        }
+                        _ => break,
+                    }
                 }
-                TokenType::DPlus => {
-                    iter.next();
-                    Tree::Inc(string.to_string())
-                }
-                TokenType::DMinus => {
-                    iter.next();
-                    Tree::Dec(string.to_string())
-                }
-                _ => Tree::Ident(string.to_string()),
-            },
+                tree
+            }
             TokenType::String(string) => Tree::String(
                 // i could use a crate for that  ig if i wanna use unicodes
                 string
@@ -232,7 +245,7 @@ impl Parser {
             TokenType::Minus => {
                 let factor = self.parse_factor(iter);
                 Tree::BinOp(
-                    Box::new(Tree::Number(0)),
+                    Box::new(Tree::Number(0.0)),
                     TokenType::Minus,
                     Box::new(factor),
                 )

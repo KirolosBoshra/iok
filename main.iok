@@ -1,20 +1,21 @@
-let a = "A7A"
-let x = 1
+let x = 0
+let y = 0
+let text = "Test"
 
-let k = x + a
-
-for x -> i+2 {
-  a++
+for x -> 5 {
+  y = y + 1
 }
 
-if x > y { 
-  exit(x)
-} elsif x == y { 
-  exit(1)
-} els {
-  exit(y)
+
+
+for i in text {
+  
 }
 
-while x > 0 {
-  k++
-}
+while x < 6 {
+  x = x + 1
+} 
+
+x
+y
+i

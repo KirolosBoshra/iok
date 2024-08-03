@@ -4,8 +4,10 @@ use crate::logger::{ErrorType, Logger};
 
 #[derive(Debug, Clone)]
 pub enum TokenType {
-    Number(usize),
+    Number(f64),
+    Bool(bool),
     String(String),
+    Null,
     Plus,
     DPlus,
     Minus,
@@ -55,7 +57,7 @@ pub struct Token {
 #[derive(Debug, Clone)]
 pub struct Lexer<'a> {
     curr_loc: Loc,
-    iter: Peekable<Chars<'a>>,
+    pub iter: Peekable<Chars<'a>>,
 }
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a String) -> Lexer<'a> {
@@ -110,6 +112,18 @@ impl<'a> Lexer<'a> {
                             token: TokenType::For,
                             loc: self.curr_loc,
                         }),
+                        "true" => tokens.push(Token {
+                            token: TokenType::Bool(true),
+                            loc: self.curr_loc,
+                        }),
+                        "false" => tokens.push(Token {
+                            token: TokenType::Bool(false),
+                            loc: self.curr_loc,
+                        }),
+                        "null" => tokens.push(Token {
+                            token: TokenType::Null,
+                            loc: self.curr_loc,
+                        }),
                         _ => tokens.push(Token {
                             token: TokenType::Ident(buf),
                             loc: self.curr_loc,
@@ -119,7 +133,7 @@ impl<'a> Lexer<'a> {
                 '0'..='9' => {
                     let mut number = String::new();
                     while let Some(&c) = self.iter.peek() {
-                        if c.is_digit(10) {
+                        if c.is_digit(10) || c == '.' {
                             number.push(c);
                             self.next();
                         } else {
