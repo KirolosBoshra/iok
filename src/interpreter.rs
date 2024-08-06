@@ -1,109 +1,6 @@
+use crate::{lexer::TokenType, object::Object, parser::Tree};
 use core::iter::Iterator;
-use core::ops::{AddAssign, Not};
 use std::{collections::HashMap, usize};
-
-use crate::{lexer::TokenType, parser::Tree};
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Object {
-    String(String),
-    Number(f64),
-    Bool(bool),
-    Null,
-    Invalid,
-    // Object(Box<Object>),
-}
-
-impl Object {
-    pub fn to_string(&self) -> Object {
-        match self {
-            Object::String(_) => self.clone(),
-            Object::Number(num) => Object::String(num.to_string()),
-            Object::Bool(b) => Object::String(b.to_string()),
-            Object::Null => Object::String("".to_string()),
-            _ => Object::String(String::new()),
-        }
-    }
-    pub fn to_number(&self) -> Object {
-        match self {
-            Object::String(string) => string
-                .parse::<f64>()
-                .map_or(Object::Invalid, Object::Number),
-            Object::Number(_) => self.clone(),
-            Object::Bool(b) => Object::Number(if *b { 1.0 } else { 0.0 }),
-            Object::Null => Object::Number(0.0),
-            _ => Object::Number(0.0),
-        }
-    }
-    pub fn to_bool(&self) -> Object {
-        match self {
-            Object::String(string) => Object::Bool(!string.is_empty()),
-            Object::Number(num) => Object::Bool(if *num != 0.0 { true } else { false }),
-            Object::Bool(_) => self.clone(),
-            Object::Null => Object::Bool(false),
-            _ => Object::Bool(false),
-        }
-    }
-    pub fn convert_to(&mut self, other: Self) {
-        match other {
-            Object::String(_) => *self = self.to_string(),
-            Object::Number(_) => *self = self.to_number(),
-            Object::Bool(_) => *self = self.to_bool(),
-            _ => {}
-        }
-    }
-    pub fn set_to(&mut self, value: Self) {
-        *self = value;
-    }
-    pub fn get_string_value(&self) -> String {
-        let tmp = self.to_string();
-        match tmp {
-            Object::String(s) => s,
-            _ => String::new(),
-        }
-    }
-    pub fn get_number_value(&self) -> f64 {
-        let tmp = self.to_number();
-        match tmp {
-            Object::Number(n) => n,
-            _ => 0.0,
-        }
-    }
-    pub fn get_bool_value(&self) -> bool {
-        let tmp = self.to_bool();
-        match tmp {
-            Object::Bool(b) => b,
-            _ => false,
-        }
-    }
-}
-
-impl Not for Object {
-    type Output = bool;
-    fn not(self) -> <Self as Not>::Output {
-        match self {
-            Object::Number(num) => num == 0.0,
-            Object::Bool(b) => !b,
-            Object::String(string) => string.is_empty(),
-            _ => false,
-        }
-    }
-}
-
-impl AddAssign for Object {
-    fn add_assign(&mut self, rhs: Self) {
-        match self {
-            Object::Number(num) => {
-                if let Object::Number(n) = rhs {
-                    *num += n;
-                } else if let Object::String(s) = rhs {
-                    num.to_string().push_str(&s);
-                }
-            }
-            _ => (),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -138,7 +35,7 @@ impl Interpreter {
             .rev()
             .find_map(|scope| scope.get_mut(&name))
     }
-
+    //TODO move this to Object Struct
     fn bin_op(&self, left: Object, op: TokenType, right: Object) -> Object {
         match op {
             TokenType::Plus => match (left, right) {
@@ -238,7 +135,32 @@ impl Interpreter {
             Tree::Number(num) => Object::Number(num),
             Tree::Bool(b) => Object::Bool(b),
             Tree::String(string) => Object::String(string),
+            Tree::List(list) => {
+                let mut buf = vec![];
+                list.iter().for_each(|item| {
+                    buf.push(self.interpret(item.clone()));
+                });
+                Object::List(buf)
+            }
             Tree::Ident(var) => self.get_var(var).unwrap_or(&mut Object::Null).clone(),
+            // TODO it's immutable for now
+            // TODO change it to a single call at a time instead of a vec
+            Tree::Calls { var, calls } => {
+                let mut var_obj = self.interpret(*var);
+                let mut res = Object::Null;
+                calls.iter().for_each(|call| match call {
+                    Tree::ListCall(index) => {
+                        res = var_obj.get_list_index(
+                            self.interpret(*index.clone())
+                                .to_number()
+                                .get_number_value() as usize,
+                        );
+                        var_obj = res.clone();
+                    }
+                    _ => {}
+                });
+                res
+            }
             Tree::BinOp(left, op, right) => {
                 let left_obj = self.interpret(*left);
                 let right_obj = self.interpret(*right);
@@ -375,6 +297,12 @@ impl Interpreter {
                                 }
                             }
                             _ => {}
+                        }
+                    }
+                    Object::List(list) => {
+                        for item in list {
+                            self.set_var(var.clone(), item);
+                            self.body_block(&body);
                         }
                     }
                     _ => (),

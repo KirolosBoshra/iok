@@ -6,7 +6,7 @@
 ## TODO
 Task  | Implemented
 ------------- | -------------
-Lists | ❌
+Lists | ❕
 Functions |  ❌
 Struct / Class |  ❌
 
@@ -16,6 +16,7 @@ Struct / Class |  ❌
 let x = 0
 let y = 0
 let str = "String"
+let list = [0, [1, 2], "test", null]
 // If ElseIf Else
 if x > 5 {
     y = 5

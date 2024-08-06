@@ -1,6 +1,7 @@
 mod interpreter;
 mod lexer;
 mod logger;
+mod object;
 mod parser;
 
 use interpreter::Interpreter;

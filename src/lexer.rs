@@ -24,6 +24,8 @@ pub enum TokenType {
     LessEqu,
     OpenParen,
     CloseParen,
+    OpenSquare,
+    CloseSquare,
     OpenCurly,
     CloseCurly,
     Comma,
@@ -39,7 +41,6 @@ pub enum TokenType {
     ElsIf,
     While,
     For,
-    // Empty,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -184,6 +185,20 @@ impl<'a> Lexer<'a> {
                 ')' => {
                     tokens.push(Token {
                         token: TokenType::CloseParen,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
+                }
+                '[' => {
+                    tokens.push(Token {
+                        token: TokenType::OpenSquare,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
+                }
+                ']' => {
+                    tokens.push(Token {
+                        token: TokenType::CloseSquare,
                         loc: self.curr_loc,
                     });
                     self.next();

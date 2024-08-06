@@ -6,15 +6,22 @@ use std::iter::Peekable;
 pub enum Tree {
     Number(f64),
     Bool(bool),
-    Ident(String),
-    Empty(),
     String(String),
+    List(Vec<Tree>),
+    Ident(String),
+    ListCall(Box<Tree>),
+    Empty(),
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Exit(Box<Tree>),
     Let(String, Box<Tree>),
     Assign(String, Box<Tree>),
     // Args(Vec<Tree>),
+    // TODO change it to a single call
+    Calls {
+        var: Box<Tree>,
+        calls: Vec<Tree>,
+    },
     If {
         expr: Box<Tree>,
         body: Vec<Tree>,
@@ -35,9 +42,6 @@ pub enum Tree {
         body: Vec<Tree>,
     },
 }
-
-// TODO change Every match iter.peek to while let
-// TODO add curr_loc here too and change it every expr
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -155,10 +159,10 @@ impl Parser {
     //     }
     // }
 
-    // fn parse_args(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>) -> Tree {
+    // fn parse_args(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
     //     let mut vec_buffer: Vec<Tree> = vec![];
     //     while let Some(next) = iter.peek().cloned() {
-    //         match next {
+    //         match next.token {
     //             TokenType::Comma => {
     //                 iter.next();
     //             }
@@ -204,6 +208,56 @@ impl Parser {
         }
     }
 
+    fn parse_items(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
+        let mut items = vec![];
+        while let Some(item) = iter.peek() {
+            match item.token {
+                TokenType::CloseSquare => {
+                    iter.next();
+                    return items;
+                }
+                TokenType::Comma => {
+                    iter.next();
+                }
+                _ => {
+                    items.push(self.parse_factor(iter));
+                }
+            }
+        }
+        Logger::error(
+            "Expected ] Or Items [..]",
+            self.prev_token.loc,
+            ErrorType::Parsing,
+        );
+        items
+    }
+
+    fn parse_calls(
+        &mut self,
+        iter: &mut Peekable<std::slice::Iter<Token>>,
+        calls_vec: &mut Vec<Tree>,
+    ) {
+        while let Some(call) = iter.peek() {
+            match call.token {
+                TokenType::OpenSquare => {
+                    iter.next();
+                    while let Some(expr) = iter.peek() {
+                        match expr.token {
+                            TokenType::CloseSquare => {
+                                iter.next();
+                                break;
+                            }
+                            _ => calls_vec
+                                .push(Tree::ListCall(Box::new(self.parse_expression(iter)))),
+                        }
+                    }
+                    self.parse_calls(iter, calls_vec);
+                }
+                _ => break,
+            }
+        }
+    }
+
     fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
         if let Some(it) = iter.next() {
             match &it.token {
@@ -216,7 +270,7 @@ impl Parser {
                 }
                 TokenType::Ident(string) => {
                     let mut tree = Tree::Ident(string.clone());
-                    while let Some(op) = iter.peek().cloned() {
+                    while let Some(op) = iter.peek() {
                         match &op.token {
                             TokenType::Equal => {
                                 iter.next();
@@ -247,7 +301,18 @@ impl Parser {
                                     )),
                                 );
                             }
-                            _ => break,
+                            _ => {
+                                let mut calls: Vec<Tree> = vec![];
+                                self.parse_calls(iter, &mut calls);
+                                if !calls.is_empty() {
+                                    tree = Tree::Calls {
+                                        var: Box::new(Tree::Ident(string.to_string())),
+                                        calls,
+                                    };
+                                }
+                                self.prev_token = it.clone();
+                                break;
+                            }
                         }
                     }
                     tree
@@ -261,6 +326,10 @@ impl Parser {
                         .replace("\\r", "\r")
                         .replace("\\\"", "\""),
                 ),
+                TokenType::OpenSquare => {
+                    let items = self.parse_items(iter);
+                    Tree::List(items)
+                }
                 TokenType::Plus => self.parse_factor(iter),
                 TokenType::Minus => {
                     let factor = self.parse_factor(iter);
@@ -402,7 +471,11 @@ impl Parser {
                     Tree::Empty()
                 }
                 _ => {
-                    Logger::error("Invalid Statement", it.loc, ErrorType::Parsing);
+                    Logger::error(
+                        &format!("Invalid Statement {:?}", it.token),
+                        it.loc,
+                        ErrorType::Parsing,
+                    );
                     Tree::Empty()
                 }
             }
