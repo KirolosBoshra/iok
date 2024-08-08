@@ -1,4 +1,5 @@
 use core::ops::{AddAssign, Not};
+use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
     String(String),
@@ -10,7 +11,7 @@ pub enum Object {
 }
 
 impl Object {
-    pub fn to_string(&self) -> Object {
+    pub fn to_string_obj(&self) -> Object {
         match self {
             Object::String(_) => self.clone(),
             Object::Number(num) => Object::String(num.to_string()),
@@ -19,7 +20,7 @@ impl Object {
             _ => Object::String(String::new()),
         }
     }
-    pub fn to_number(&self) -> Object {
+    pub fn to_number_obj(&self) -> Object {
         match self {
             Object::String(string) => string
                 .parse::<f64>()
@@ -30,7 +31,7 @@ impl Object {
             _ => Object::Number(0.0),
         }
     }
-    pub fn to_bool(&self) -> Object {
+    pub fn to_bool_obj(&self) -> Object {
         match self {
             Object::String(string) => Object::Bool(!string.is_empty()),
             Object::Number(num) => Object::Bool(if *num != 0.0 { true } else { false }),
@@ -41,9 +42,9 @@ impl Object {
     }
     pub fn convert_to(&mut self, other: Self) {
         match other {
-            Object::String(_) => *self = self.to_string(),
-            Object::Number(_) => *self = self.to_number(),
-            Object::Bool(_) => *self = self.to_bool(),
+            Object::String(_) => *self = self.to_string_obj(),
+            Object::Number(_) => *self = self.to_number_obj(),
+            Object::Bool(_) => *self = self.to_bool_obj(),
             _ => {}
         }
     }
@@ -51,21 +52,21 @@ impl Object {
         *self = value;
     }
     pub fn get_string_value(&self) -> String {
-        let tmp = self.to_string();
+        let tmp = self.to_string_obj();
         match tmp {
             Object::String(s) => s,
             _ => String::new(),
         }
     }
     pub fn get_number_value(&self) -> f64 {
-        let tmp = self.to_number();
+        let tmp = self.to_number_obj();
         match tmp {
             Object::Number(n) => n,
             _ => 0.0,
         }
     }
     pub fn get_bool_value(&self) -> bool {
-        let tmp = self.to_bool();
+        let tmp = self.to_bool_obj();
         match tmp {
             Object::Bool(b) => b,
             _ => false,
@@ -92,9 +93,25 @@ impl Object {
         match self {
             Object::List(list) => list.get_mut(i).unwrap_or(&mut Object::Null).set_to(value),
             Object::String(s) => {
-                s.replace_range(i..i + 1, &value.to_string().get_string_value());
+                s.replace_range(i..i + 1, &value.to_string_obj().get_string_value());
             }
             _ => {}
+        }
+    }
+}
+
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Object::String(s) => write!(f, "\"{}\"", s),
+            Object::Number(n) => write!(f, "{}", n),
+            Object::Bool(b) => write!(f, "{}", b),
+            Object::List(list) => {
+                let list_str: Vec<String> = list.iter().map(|obj| obj.to_string()).collect();
+                write!(f, "[{}]", list_str.join(", "))
+            }
+            Object::Null => write!(f, "null"),
+            Object::Invalid => write!(f, "invalid"),
         }
     }
 }

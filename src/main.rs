@@ -30,7 +30,7 @@ fn interpret_mode() {
 
         // println!("{:?}", parser.parse_tokens());
         println!(
-            "{:?}",
+            "{}",
             interpreter.interpret(parser.parse_tokens().last().unwrap().clone())
         );
     }

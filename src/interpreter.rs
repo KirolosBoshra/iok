@@ -145,7 +145,7 @@ impl Interpreter {
             Tree::Ident(var) => self.get_var(var).unwrap_or(&mut Object::Null).clone(),
             Tree::ListCall(var, index) => self
                 .interpret(*var)
-                .get_list_index(self.interpret(*index).to_number().get_number_value() as usize),
+                .get_list_index(self.interpret(*index).to_number_obj().get_number_value() as usize),
             Tree::BinOp(left, op, right) => {
                 let left_obj = self.interpret(*left);
                 let right_obj = self.interpret(*right);
@@ -175,7 +175,7 @@ impl Interpreter {
                     }
                     Tree::ListCall(var, index) => {
                         let index_num =
-                            self.interpret(*index).to_number().get_number_value() as usize;
+                            self.interpret(*index).to_number_obj().get_number_value() as usize;
 
                         if let Some(var_obj) = self.interpret_mut(*var) {
                             var_obj.set_list_index(index_num, value_obj);
@@ -195,7 +195,7 @@ impl Interpreter {
             } => {
                 let expr_obj = self.interpret(*expr);
                 //TODO THIS SO UGLY
-                if expr_obj.to_bool().get_bool_value() {
+                if expr_obj.to_bool_obj().get_bool_value() {
                     self.enter_scope();
                     body.iter().for_each(|stmt| {
                         self.interpret(stmt.clone());
@@ -207,7 +207,7 @@ impl Interpreter {
                         match stmt {
                             Tree::ElsIf { expr, body } => {
                                 let expr_stmt_obj = self.interpret(*expr);
-                                if expr_stmt_obj.to_bool().get_bool_value() {
+                                if expr_stmt_obj.to_bool_obj().get_bool_value() {
                                     self.enter_scope();
                                     body.iter().for_each(|tree| {
                                         self.interpret(tree.clone());
@@ -232,7 +232,7 @@ impl Interpreter {
 
             Tree::While { expr, body } => {
                 let mut expr_obj = self.interpret(*expr.clone());
-                while expr_obj.to_bool().get_bool_value() {
+                while expr_obj.to_bool_obj().get_bool_value() {
                     self.body_block(&body);
                     expr_obj = self.interpret(*expr.clone());
                 }
@@ -326,7 +326,7 @@ impl Interpreter {
         match tree {
             Tree::Ident(name) => self.get_var(name),
             Tree::ListCall(list, index) => {
-                let index_num = self.interpret(*index).to_number().get_number_value() as usize;
+                let index_num = self.interpret(*index).to_number_obj().get_number_value() as usize;
                 self.interpret_mut(*list)
                     .unwrap()
                     .get_list_index_mut(index_num)
