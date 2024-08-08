@@ -6,7 +6,7 @@
 ## TODO
 Task  | Implemented
 ------------- | -------------
-Lists | ❕
+Lists | ✅
 Functions |  ❌
 Struct / Class |  ❌
 

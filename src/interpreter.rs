@@ -143,24 +143,9 @@ impl Interpreter {
                 Object::List(buf)
             }
             Tree::Ident(var) => self.get_var(var).unwrap_or(&mut Object::Null).clone(),
-            // TODO it's immutable for now
-            // TODO change it to a single call at a time instead of a vec
-            Tree::Calls { var, calls } => {
-                let mut var_obj = self.interpret(*var);
-                let mut res = Object::Null;
-                calls.iter().for_each(|call| match call {
-                    Tree::ListCall(index) => {
-                        res = var_obj.get_list_index(
-                            self.interpret(*index.clone())
-                                .to_number()
-                                .get_number_value() as usize,
-                        );
-                        var_obj = res.clone();
-                    }
-                    _ => {}
-                });
-                res
-            }
+            Tree::ListCall(var, index) => self
+                .interpret(*var)
+                .get_list_index(self.interpret(*index).to_number().get_number_value() as usize),
             Tree::BinOp(left, op, right) => {
                 let left_obj = self.interpret(*left);
                 let right_obj = self.interpret(*right);
@@ -178,12 +163,26 @@ impl Interpreter {
                 self.get_var(var).unwrap_or(&mut Object::Null).clone()
             }
             Tree::Assign(var, value) => {
-                let value_obj = self.interpret(*value);
-                for scope in self.scopes.iter_mut().rev() {
-                    if scope.contains_key(&var) {
-                        scope.insert(var, value_obj.clone());
-                        return value_obj;
+                let value_obj = self.interpret(*value.clone());
+                match *var {
+                    Tree::Ident(name) => {
+                        for scope in self.scopes.iter_mut().rev() {
+                            if scope.contains_key(&name) {
+                                scope.insert(name, value_obj.clone());
+                                return value_obj;
+                            }
+                        }
                     }
+                    Tree::ListCall(var, index) => {
+                        let index_num =
+                            self.interpret(*index).to_number().get_number_value() as usize;
+
+                        if let Some(var_obj) = self.interpret_mut(*var) {
+                            var_obj.set_list_index(index_num, value_obj);
+                            return var_obj.clone();
+                        }
+                    }
+                    _ => {}
                 }
                 Object::Null
             }
@@ -285,7 +284,7 @@ impl Interpreter {
                             Object::Number(n) => {
                                 let mask = ((((*n < num) as i32) << 1) - 1) as f64;
                                 body.push(Tree::Assign(
-                                    var.clone(),
+                                    Box::new(Tree::Ident(var.clone())),
                                     Box::new(Tree::BinOp(
                                         Box::new(Tree::Ident(var.clone())),
                                         TokenType::Plus,
@@ -319,6 +318,20 @@ impl Interpreter {
                 std::process::exit(exit_code);
             }
             _ => Object::Null,
+        }
+    }
+
+    // A Helper Method to mut Objects
+    fn interpret_mut(&mut self, tree: Tree) -> Option<&mut Object> {
+        match tree {
+            Tree::Ident(name) => self.get_var(name),
+            Tree::ListCall(list, index) => {
+                let index_num = self.interpret(*index).to_number().get_number_value() as usize;
+                self.interpret_mut(*list)
+                    .unwrap()
+                    .get_list_index_mut(index_num)
+            }
+            _ => None,
         }
     }
 

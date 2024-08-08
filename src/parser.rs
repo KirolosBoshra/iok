@@ -9,19 +9,13 @@ pub enum Tree {
     String(String),
     List(Vec<Tree>),
     Ident(String),
-    ListCall(Box<Tree>),
+    ListCall(Box<Tree>, Box<Tree>),
     Empty(),
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Exit(Box<Tree>),
     Let(String, Box<Tree>),
-    Assign(String, Box<Tree>),
-    // Args(Vec<Tree>),
-    // TODO change it to a single call
-    Calls {
-        var: Box<Tree>,
-        calls: Vec<Tree>,
-    },
+    Assign(Box<Tree>, Box<Tree>),
     If {
         expr: Box<Tree>,
         body: Vec<Tree>,
@@ -98,6 +92,33 @@ impl Parser {
                     let right = self.parse_expression(iter);
                     left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
+                TokenType::Equal => {
+                    iter.next();
+                    let expr = self.parse_expression(iter);
+                    left = Tree::Assign(Box::new(left), Box::new(expr));
+                }
+                TokenType::DPlus => {
+                    iter.next();
+                    left = Tree::Assign(
+                        Box::new(left.clone()),
+                        Box::new(Tree::BinOp(
+                            Box::new(left),
+                            TokenType::Plus,
+                            Box::new(Tree::Number(1.0)),
+                        )),
+                    );
+                }
+                TokenType::DMinus => {
+                    iter.next();
+                    left = Tree::Assign(
+                        Box::new(left.clone()),
+                        Box::new(Tree::BinOp(
+                            Box::new(left),
+                            TokenType::Minus,
+                            Box::new(Tree::Number(1.0)),
+                        )),
+                    );
+                }
                 _ => break,
             }
             self.prev_token = op.clone();
@@ -115,6 +136,21 @@ impl Parser {
                     iter.next();
                     let right = self.parse_factor(iter);
                     left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                TokenType::OpenSquare => {
+                    iter.next();
+                    while let Some(peek) = iter.peek().clone() {
+                        match peek.token {
+                            TokenType::CloseSquare => {
+                                iter.next();
+                                break;
+                            }
+                            _ => {
+                                let index = self.parse_expression(iter);
+                                left = Tree::ListCall(Box::new(left), Box::new(index));
+                            }
+                        }
+                    }
                 }
                 _ => break,
             }
@@ -143,38 +179,6 @@ impl Parser {
         }
         body
     }
-    // TODO not used yet?
-    //
-    // fn parse_paren_expr(
-    //     &mut self,
-    //     iter: &mut std::iter::Peekable<std::slice::Iter<TokenType>>,
-    // ) -> Tree {
-    //     match iter.next().unwrap() {
-    //         TokenType::OpenParen => {
-    //             let expr = self.parse_expression(iter);
-    //             iter.next();
-    //             expr
-    //         }
-    //         _ => panic!("Expected ("),
-    //     }
-    // }
-
-    // fn parse_args(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
-    //     let mut vec_buffer: Vec<Tree> = vec![];
-    //     while let Some(next) = iter.peek().cloned() {
-    //         match next.token {
-    //             TokenType::Comma => {
-    //                 iter.next();
-    //             }
-    //             TokenType::CloseParen => {
-    //                 iter.next();
-    //                 break;
-    //             }
-    //             _ => vec_buffer.push(self.parse_expression(iter)),
-    //         }
-    //     }
-    //     Tree::Args(vec_buffer)
-    // }
 
     fn next_case(
         &mut self,
@@ -188,7 +192,7 @@ impl Parser {
                     iter.next();
                     if !els.is_empty() {
                         Logger::error(
-                            "Unexpecte els statements",
+                            "Unexpected els statements",
                             iter.peek().unwrap().loc,
                             ErrorType::Parsing,
                         );
@@ -232,32 +236,6 @@ impl Parser {
         items
     }
 
-    fn parse_calls(
-        &mut self,
-        iter: &mut Peekable<std::slice::Iter<Token>>,
-        calls_vec: &mut Vec<Tree>,
-    ) {
-        while let Some(call) = iter.peek() {
-            match call.token {
-                TokenType::OpenSquare => {
-                    iter.next();
-                    while let Some(expr) = iter.peek() {
-                        match expr.token {
-                            TokenType::CloseSquare => {
-                                iter.next();
-                                break;
-                            }
-                            _ => calls_vec
-                                .push(Tree::ListCall(Box::new(self.parse_expression(iter)))),
-                        }
-                    }
-                    self.parse_calls(iter, calls_vec);
-                }
-                _ => break,
-            }
-        }
-    }
-
     fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
         if let Some(it) = iter.next() {
             match &it.token {
@@ -268,55 +246,7 @@ impl Parser {
                     let expr = self.parse_expression(iter);
                     Tree::CmpOp(Box::new(expr), TokenType::Bang, Box::new(Tree::Empty()))
                 }
-                TokenType::Ident(string) => {
-                    let mut tree = Tree::Ident(string.clone());
-                    while let Some(op) = iter.peek() {
-                        match &op.token {
-                            TokenType::Equal => {
-                                iter.next();
-                                let expr = self.parse_expression(iter);
-                                tree = Tree::Assign(string.to_string(), Box::new(expr));
-                            }
-                            TokenType::DPlus => {
-                                iter.next();
-                                self.prev_token = it.clone();
-                                tree = Tree::Assign(
-                                    string.to_string(),
-                                    Box::new(Tree::BinOp(
-                                        Box::new(Tree::Ident(string.to_string())),
-                                        TokenType::Plus,
-                                        Box::new(Tree::Number(1.0)),
-                                    )),
-                                );
-                            }
-                            TokenType::DMinus => {
-                                iter.next();
-                                self.prev_token = it.clone();
-                                tree = Tree::Assign(
-                                    string.to_string(),
-                                    Box::new(Tree::BinOp(
-                                        Box::new(Tree::Ident(string.to_string())),
-                                        TokenType::Minus,
-                                        Box::new(Tree::Number(1.0)),
-                                    )),
-                                );
-                            }
-                            _ => {
-                                let mut calls: Vec<Tree> = vec![];
-                                self.parse_calls(iter, &mut calls);
-                                if !calls.is_empty() {
-                                    tree = Tree::Calls {
-                                        var: Box::new(Tree::Ident(string.to_string())),
-                                        calls,
-                                    };
-                                }
-                                self.prev_token = it.clone();
-                                break;
-                            }
-                        }
-                    }
-                    tree
-                }
+                TokenType::Ident(string) => Tree::Ident(string.to_string()),
                 TokenType::String(string) => Tree::String(
                     // i could use a crate for that  ig if i wanna use unicodes
                     string

@@ -81,6 +81,22 @@ impl Object {
             _ => Object::Null,
         }
     }
+    pub fn get_list_index_mut(&mut self, i: usize) -> Option<&mut Object> {
+        match self {
+            Object::List(ref mut list) => list.get_mut(i),
+            Object::String(_) => Some(self),
+            _ => None,
+        }
+    }
+    pub fn set_list_index(&mut self, i: usize, value: Object) {
+        match self {
+            Object::List(list) => list.get_mut(i).unwrap_or(&mut Object::Null).set_to(value),
+            Object::String(s) => {
+                s.replace_range(i..i + 1, &value.to_string().get_string_value());
+            }
+            _ => {}
+        }
+    }
 }
 
 impl Not for Object {
