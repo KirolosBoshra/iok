@@ -68,6 +68,6 @@ fn main() {
     // println!("{:?}", parsed_tree);
 
     parsed_tree.iter().for_each(|stmt| {
-        println!("{:?}", interpreter.interpret(stmt.clone()));
+        interpreter.interpret(stmt.clone());
     });
 }
