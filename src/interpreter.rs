@@ -80,6 +80,15 @@ impl Interpreter {
                 (Object::String(left_string), Object::Number(right_num)) => {
                     Object::String(left_string.repeat(right_num as usize))
                 }
+                (Object::List(ref list), Object::Number(num)) => {
+                    let mut new_list = vec![];
+                    for _ in 0..num as usize {
+                        for item in list {
+                            new_list.push(item.clone());
+                        }
+                    }
+                    Object::List(new_list)
+                }
                 _ => Object::Null,
             },
             TokenType::Divide => match (left, right) {
@@ -92,6 +101,10 @@ impl Interpreter {
                 }
                 _ => Object::Null,
             },
+            TokenType::BitAnd => left & right,
+            TokenType::BitOR => left | right,
+            TokenType::Shl => left << right,
+            TokenType::Shr => left >> right,
             _ => Object::Invalid,
         }
     }
@@ -125,6 +138,12 @@ impl Interpreter {
                 _ => Object::Bool(false),
             },
             TokenType::Bang => Object::Bool(!left),
+            TokenType::And => Object::Bool(
+                left.to_bool_obj().get_bool_value() && right.to_bool_obj().get_bool_value(),
+            ),
+            TokenType::Or => Object::Bool(
+                left.to_bool_obj().get_bool_value() || right.to_bool_obj().get_bool_value(),
+            ),
             _ => Object::Bool(false),
         }
     }
@@ -247,6 +266,7 @@ impl Interpreter {
                 let expr_obj = self.interpret(*expr.clone());
                 match expr_obj {
                     Object::String(string) => {
+                        self.enter_scope();
                         for c in string.chars() {
                             let var_obj = if let Some(v) = self.get_var(var.clone()) {
                                 v
@@ -266,8 +286,10 @@ impl Interpreter {
                             }
                             self.body_block(&body);
                         }
+                        self.exit_scope();
                     }
                     Object::Number(num) => {
+                        self.enter_scope();
                         let var_obj = if let Some(v) = self.get_var(var.clone()) {
                             v.convert_to(Object::Number(0.0));
                             match v {
@@ -297,12 +319,15 @@ impl Interpreter {
                             }
                             _ => {}
                         }
+                        self.exit_scope();
                     }
                     Object::List(list) => {
+                        self.enter_scope();
                         for item in list {
                             self.set_var(var.clone(), item);
                             self.body_block(&body);
                         }
+                        self.exit_scope();
                     }
                     _ => (),
                 }
@@ -317,6 +342,13 @@ impl Interpreter {
                 };
                 std::process::exit(exit_code);
             }
+
+            Tree::Dbg(expr) => {
+                let expr_obj = self.interpret(*expr);
+                println!("{expr_obj}");
+                Object::Null
+            }
+
             _ => Object::Null,
         }
     }

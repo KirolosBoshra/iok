@@ -8,9 +8,8 @@ use interpreter::Interpreter;
 use lexer::Lexer;
 use parser::Parser;
 use std::{fs::File, io, io::Read, io::Write};
-fn interpret_mode() {
+fn interpret_mode(interpreter: &mut Interpreter) {
     let mut input = String::new();
-    let mut interpreter = Interpreter::new();
     loop {
         print!(">");
         input.clear();
@@ -42,7 +41,7 @@ fn main() {
     if args.len() < 2 {
         // eprintln!("Usages:\n./iok <file_path>");
         // std::process::exit(1);
-        interpret_mode()
+        interpret_mode(&mut Interpreter::new());
     }
 
     let mut file_name = "main.iok";

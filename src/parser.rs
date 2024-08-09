@@ -14,6 +14,7 @@ pub enum Tree {
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Exit(Box<Tree>),
+    Dbg(Box<Tree>),
     Let(String, Box<Tree>),
     Assign(Box<Tree>, Box<Tree>),
     If {
@@ -92,11 +93,6 @@ impl Parser {
                     let right = self.parse_expression(iter);
                     left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
-                TokenType::Equal => {
-                    iter.next();
-                    let expr = self.parse_expression(iter);
-                    left = Tree::Assign(Box::new(left), Box::new(expr));
-                }
                 TokenType::DPlus => {
                     iter.next();
                     left = Tree::Assign(
@@ -119,6 +115,16 @@ impl Parser {
                         )),
                     );
                 }
+                TokenType::BitAnd | TokenType::BitOR => {
+                    iter.next();
+                    let right = self.parse_expression(iter);
+                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                TokenType::Shl | TokenType::Shr => {
+                    iter.next();
+                    let right = self.parse_expression(iter);
+                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
                 _ => break,
             }
             self.prev_token = op.clone();
@@ -136,6 +142,28 @@ impl Parser {
                     iter.next();
                     let right = self.parse_factor(iter);
                     left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                TokenType::Equal => {
+                    iter.next();
+                    let expr = self.parse_expression(iter);
+                    left = Tree::Assign(Box::new(left), Box::new(expr));
+                }
+                TokenType::PlusEqu => {
+                    iter.next();
+                    let right = self.parse_expression(iter);
+                    left = Tree::Assign(
+                        Box::new(left.clone()),
+                        Box::new(Tree::BinOp(
+                            Box::new(left),
+                            TokenType::Plus,
+                            Box::new(right),
+                        )),
+                    );
+                }
+                TokenType::And | TokenType::Or => {
+                    iter.next();
+                    let right = self.parse_factor(iter);
+                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
                 TokenType::OpenSquare => {
                     iter.next();
@@ -160,7 +188,7 @@ impl Parser {
     }
     fn parse_block(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
         let mut body = vec![];
-        while let Some(peek) = iter.peek() {
+        if let Some(peek) = iter.peek() {
             match peek.token {
                 TokenType::OpenCurly => {
                     iter.next();
@@ -170,7 +198,10 @@ impl Parser {
                                 iter.next();
                                 break;
                             }
-                            _ => body.push(self.parse_factor(iter)),
+                            _ => {
+                                let expr = self.parse_expression(iter);
+                                body.push(expr);
+                            }
                         }
                     }
                 }
@@ -180,13 +211,43 @@ impl Parser {
         body
     }
 
+    // Helper function to check and consume the expected token
+    // fn expect_token(
+    //     &mut self,
+    //     iter: &mut Peekable<std::slice::Iter<Token>>,
+    //     expected: TokenType,
+    // ) -> bool {
+    //     if let Some(token) = iter.peek() {
+    //         if token.token == expected {
+    //             iter.next(); // Consume the expected token
+    //             return true;
+    //         } else {
+    //             Logger::error(
+    //                 &format!(
+    //                     "Expected token: {:?}, but found: {:?}",
+    //                     expected, token.token
+    //                 ),
+    //                 token.loc,
+    //                 ErrorType::Parsing,
+    //             );
+    //         }
+    //     } else {
+    //         Logger::error(
+    //             &format!("Expected token: {:?}, but reached end of input", expected),
+    //             self.prev_token.loc,
+    //             ErrorType::Parsing,
+    //         );
+    //     }
+    //     false
+    // }
+
     fn next_case(
         &mut self,
         iter: &mut Peekable<std::slice::Iter<'_, Token>>,
         els: &mut Vec<Tree>,
         els_ifs: &mut Vec<Tree>,
     ) {
-        while let Some(peek) = iter.peek() {
+        if let Some(peek) = iter.peek() {
             match peek.token {
                 TokenType::Els => {
                     iter.next();
@@ -355,10 +416,8 @@ impl Parser {
                     Tree::While { expr, body }
                 }
                 TokenType::For => match &iter.next().unwrap().token {
-                    // TODO Syntax not Confirmed yet
-                    // for x -> 12 {}
-                    // for x..12 {}
-                    // for let x =-> 12
+                    // TODO Change Syntax to
+                    // for i -> 0..12 {}
                     TokenType::Ident(var) => match &iter.peek().unwrap().token {
                         TokenType::ThinArrow => {
                             iter.next();
@@ -396,13 +455,18 @@ impl Parser {
                     let expr = self.parse_factor(iter);
                     Tree::Exit(Box::new(expr))
                 }
+                // TODO TMP function
+                TokenType::Dbg => {
+                    let expr = self.parse_factor(iter);
+                    Tree::Dbg(Box::new(expr))
+                }
                 TokenType::Els | TokenType::ElsIf => {
                     Logger::error("Expected If statement first", it.loc, ErrorType::Parsing);
                     Tree::Empty()
                 }
                 _ => {
                     Logger::error(
-                        &format!("Invalid Statement {:?}", it.token),
+                        &format!("Invalid Token {:?}", it.token),
                         it.loc,
                         ErrorType::Parsing,
                     );

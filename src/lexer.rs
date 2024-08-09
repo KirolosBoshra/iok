@@ -2,13 +2,14 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::logger::{ErrorType, Logger};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     Number(f64),
     Bool(bool),
     String(String),
     Null,
     Plus,
+    PlusEqu,
     DPlus,
     Minus,
     DMinus,
@@ -22,6 +23,12 @@ pub enum TokenType {
     Less,
     GreatEqu,
     LessEqu,
+    BitAnd,
+    And,
+    BitOR,
+    Or,
+    Shl,
+    Shr,
     OpenParen,
     CloseParen,
     OpenSquare,
@@ -41,6 +48,7 @@ pub enum TokenType {
     ElsIf,
     While,
     For,
+    Dbg,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -123,6 +131,10 @@ impl<'a> Lexer<'a> {
                         }),
                         "null" => tokens.push(Token {
                             token: TokenType::Null,
+                            loc: self.curr_loc,
+                        }),
+                        "dbg" => tokens.push(Token {
+                            token: TokenType::Dbg,
                             loc: self.curr_loc,
                         }),
                         _ => tokens.push(Token {
@@ -219,17 +231,29 @@ impl<'a> Lexer<'a> {
                 }
                 '+' => {
                     self.next();
-                    if *self.iter.peek().unwrap_or(&' ') == '+' {
-                        self.next();
-                        tokens.push(Token {
-                            token: TokenType::DPlus,
-                            loc: self.curr_loc,
-                        });
-                    } else {
-                        tokens.push(Token {
-                            token: TokenType::Plus,
-                            loc: self.curr_loc,
-                        });
+                    if let Some(c) = self.iter.peek() {
+                        match c {
+                            '+' => {
+                                tokens.push(Token {
+                                    token: TokenType::DPlus,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            '=' => {
+                                tokens.push(Token {
+                                    token: TokenType::PlusEqu,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            _ => {
+                                tokens.push(Token {
+                                    token: TokenType::Plus,
+                                    loc: self.curr_loc,
+                                });
+                            }
+                        }
                     }
                 }
                 '-' => {
@@ -307,33 +331,91 @@ impl<'a> Lexer<'a> {
                 }
                 '>' => {
                     self.next();
-                    if *self.iter.peek().unwrap_or(&' ') == '=' {
-                        tokens.push(Token {
-                            token: TokenType::GreatEqu,
-                            loc: self.curr_loc,
-                        });
-                        self.next();
-                    } else {
-                        tokens.push(Token {
-                            token: TokenType::Greater,
-                            loc: self.curr_loc,
-                        });
+                    if let Some(c) = self.iter.peek() {
+                        match c {
+                            '=' => {
+                                tokens.push(Token {
+                                    token: TokenType::GreatEqu,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            '>' => {
+                                tokens.push(Token {
+                                    token: TokenType::Shr,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            _ => {
+                                tokens.push(Token {
+                                    token: TokenType::Greater,
+                                    loc: self.curr_loc,
+                                });
+                            }
+                        }
                     }
                 }
 
                 '<' => {
                     self.next();
-                    if *self.iter.peek().unwrap_or(&' ') == '=' {
-                        tokens.push(Token {
-                            token: TokenType::LessEqu,
-                            loc: self.curr_loc,
-                        });
-                        self.next();
-                    } else {
-                        tokens.push(Token {
-                            token: TokenType::Less,
-                            loc: self.curr_loc,
-                        });
+                    if let Some(c) = self.iter.peek() {
+                        match c {
+                            '=' => {
+                                tokens.push(Token {
+                                    token: TokenType::LessEqu,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            '<' => {
+                                tokens.push(Token {
+                                    token: TokenType::Shl,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            _ => {
+                                tokens.push(Token {
+                                    token: TokenType::Less,
+                                    loc: self.curr_loc,
+                                });
+                            }
+                        }
+                    }
+                }
+                '&' => {
+                    self.next();
+                    if let Some(c) = self.iter.peek() {
+                        if *c == '&' {
+                            tokens.push(Token {
+                                token: TokenType::And,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        } else {
+                            tokens.push(Token {
+                                token: TokenType::BitAnd,
+                                loc: self.curr_loc,
+                            })
+                        }
+                    }
+                }
+                '|' => {
+                    self.next();
+                    if let Some(c) = self.iter.peek() {
+                        if *c == '|' {
+                            tokens.push(Token {
+                                token: TokenType::Or,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        } else {
+                            tokens.push(Token {
+                                token: TokenType::BitOR,
+                                loc: self.curr_loc,
+                            });
+                        }
                     }
                 }
                 '.' => {

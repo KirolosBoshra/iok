@@ -1,5 +1,5 @@
-use core::ops::{AddAssign, Not};
-use std::fmt;
+use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
+use std::{fmt, ops::BitOr};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
     String(String),
@@ -93,6 +93,11 @@ impl Object {
         match self {
             Object::List(list) => list.get_mut(i).unwrap_or(&mut Object::Null).set_to(value),
             Object::String(s) => {
+                if i >= s.len() {
+                    // IDK Why s.reserve(n) doesn't work
+                    let tmp: Vec<char> = std::iter::repeat(' ').take(i - s.len() + 1).collect();
+                    s.extend(tmp);
+                }
                 s.replace_range(i..i + 1, &value.to_string_obj().get_string_value());
             }
             _ => {}
@@ -110,7 +115,7 @@ impl fmt::Display for Object {
                 let list_str: Vec<String> = list.iter().map(|obj| obj.to_string()).collect();
                 write!(f, "[{}]", list_str.join(", "))
             }
-            Object::Null => write!(f, "null"),
+            Object::Null => write!(f, ""),
             Object::Invalid => write!(f, "invalid"),
         }
     }
@@ -132,13 +137,59 @@ impl AddAssign for Object {
     fn add_assign(&mut self, rhs: Self) {
         match self {
             Object::Number(num) => {
-                if let Object::Number(n) = rhs {
+                if let Object::Number(n) = rhs.to_number_obj() {
                     *num += n;
-                } else if let Object::String(s) = rhs {
+                } else if let Object::String(s) = rhs.to_string_obj() {
                     num.to_string().push_str(&s);
                 }
             }
+            Object::String(s) => {
+                s.push_str(&rhs.to_string());
+            }
             _ => (),
+        }
+    }
+}
+
+impl BitAnd for Object {
+    type Output = Object;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(l), Object::Number(r)) => Object::Number((l as i32 & r as i32) as f64),
+            _ => Object::Invalid,
+        }
+    }
+}
+
+impl BitOr for Object {
+    type Output = Object;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(l), Object::Number(r)) => Object::Number((l as i32 | r as i32) as f64),
+            _ => Object::Invalid,
+        }
+    }
+}
+
+impl Shl for Object {
+    type Output = Object;
+    fn shl(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(l), Object::Number(r)) => {
+                Object::Number(((l as i32) << (r as i32)) as f64)
+            }
+            _ => Object::Invalid,
+        }
+    }
+}
+impl Shr for Object {
+    type Output = Object;
+    fn shr(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(l), Object::Number(r)) => {
+                Object::Number(((l as i32) >> (r as i32)) as f64)
+            }
+            _ => Object::Invalid,
         }
     }
 }
