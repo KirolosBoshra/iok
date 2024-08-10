@@ -7,17 +7,16 @@ board[BOARD_CAP - 2] = 1
 
 let output = ""
 
-for i -> (BOARD_CAP - 2) {
+for i -> 0..(BOARD_CAP - 2) {
   let current_row = ""
-  for j -> (BOARD_CAP) {
+  for j -> 0..(BOARD_CAP) {
     current_row += " #"[board[j]]
   }
 
   output += "\n" + current_row
 
   let pattern = (board[0] << 1) | board[1]
-  let k = 1
-  for k -> (BOARD_CAP - 1) {
+  for k -> 1..(BOARD_CAP - 1) {
     pattern = ((pattern << 1) & 7) | board[k + 1]
     board[k] = (110 >> pattern) & 1
   }

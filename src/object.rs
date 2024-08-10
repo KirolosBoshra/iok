@@ -6,6 +6,7 @@ pub enum Object {
     Number(f64),
     Bool(bool),
     List(Vec<Object>),
+    Range(f64, f64),
     Null,
     Invalid,
 }
@@ -95,7 +96,7 @@ impl Object {
             Object::String(s) => {
                 if i >= s.len() {
                     // IDK Why s.reserve(n) doesn't work
-                    let tmp: Vec<char> = std::iter::repeat(' ').take(i - s.len() + 1).collect();
+                    let tmp: Vec<char> = std::iter::repeat(' ').take(10).collect();
                     s.extend(tmp);
                 }
                 s.replace_range(i..i + 1, &value.to_string_obj().get_string_value());
@@ -115,6 +116,7 @@ impl fmt::Display for Object {
                 let list_str: Vec<String> = list.iter().map(|obj| obj.to_string()).collect();
                 write!(f, "[{}]", list_str.join(", "))
             }
+            Object::Range(s, e) => write!(f, "{s}..{e}"),
             Object::Null => write!(f, ""),
             Object::Invalid => write!(f, "invalid"),
         }

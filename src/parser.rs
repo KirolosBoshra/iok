@@ -13,6 +13,7 @@ pub enum Tree {
     Empty(),
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
+    Range(Box<Tree>, Box<Tree>),
     Exit(Box<Tree>),
     Dbg(Box<Tree>),
     Let(String, Box<Tree>),
@@ -39,7 +40,7 @@ pub enum Tree {
 }
 
 pub struct Parser {
-    tokens: Vec<Token>,
+    pub tokens: Vec<Token>,
     prev_token: Token,
 }
 
@@ -91,7 +92,7 @@ impl Parser {
                 TokenType::DDot => {
                     iter.next();
                     let right = self.parse_expression(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                    left = Tree::Range(Box::new(left), Box::new(right));
                 }
                 TokenType::DPlus => {
                     iter.next();
@@ -435,16 +436,9 @@ impl Parser {
                             Tree::Empty()
                         }
                     },
-                    TokenType::OpenParen => {
-                        let expr = Box::new(self.parse_expression(iter));
-                        iter.next();
-                        let body = self.parse_block(iter);
-                        self.prev_token = it.clone();
-                        Tree::While { expr, body }
-                    }
                     _ => {
                         Logger::error(
-                            "Expected (Expr) or Var -> expr..expr",
+                            "Expected Var -> Expr..Expr or Var -> List",
                             it.loc,
                             ErrorType::Parsing,
                         );

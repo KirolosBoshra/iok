@@ -144,9 +144,10 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '0'..='9' => {
+                    //THIS UGLY also
                     let mut number = String::new();
                     while let Some(&c) = self.iter.peek() {
-                        if c.is_digit(10) || c == '.' {
+                        if c.is_digit(10) || (c == '.' && self.iter.clone().nth(1) != Some('.')) {
                             number.push(c);
                             self.next();
                         } else {

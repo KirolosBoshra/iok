@@ -26,8 +26,11 @@ if x > 5 {
     y = 6
 }
 // Loops
-for x -> str {
+for i -> str {
     y--
+}
+for i -> 0..10 {
+    x++
 }
 while y < 0 {
     y++

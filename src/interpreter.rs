@@ -162,6 +162,14 @@ impl Interpreter {
                 Object::List(buf)
             }
             Tree::Ident(var) => self.get_var(var).unwrap_or(&mut Object::Null).clone(),
+            Tree::Range(start, end) => {
+                let start_obj = self.interpret(*start);
+                let end_obj = self.interpret(*end);
+                if let (Object::Number(s), Object::Number(e)) = (start_obj, end_obj) {
+                    return Object::Range(s, e);
+                }
+                Object::Invalid
+            }
             Tree::ListCall(var, index) => self
                 .interpret(*var)
                 .get_list_index(self.interpret(*index).to_number_obj().get_number_value() as usize),
@@ -251,10 +259,12 @@ impl Interpreter {
 
             Tree::While { expr, body } => {
                 let mut expr_obj = self.interpret(*expr.clone());
+                self.enter_scope();
                 while expr_obj.to_bool_obj().get_bool_value() {
                     self.body_block(&body);
                     expr_obj = self.interpret(*expr.clone());
                 }
+                self.exit_scope();
                 Object::Null
             }
 
@@ -265,14 +275,27 @@ impl Interpreter {
             } => {
                 let expr_obj = self.interpret(*expr.clone());
                 match expr_obj {
+                    Object::Range(start, end) => {
+                        self.enter_scope();
+                        self.set_var(var.clone(), Object::Number(start));
+                        let mask = ((((start < end) as i32) << 1) - 1) as f64;
+                        body.push(Tree::Assign(
+                            Box::new(Tree::Ident(var.clone())),
+                            Box::new(Tree::BinOp(
+                                Box::new(Tree::Ident(var.clone())),
+                                TokenType::Plus,
+                                Box::new(Tree::Number(mask)),
+                            )),
+                        ));
+                        while self.get_var(var.clone()).unwrap().get_number_value() != end {
+                            self.body_block(&body);
+                        }
+                        self.exit_scope();
+                    }
                     Object::String(string) => {
                         self.enter_scope();
                         for c in string.chars() {
-                            let var_obj = if let Some(v) = self.get_var(var.clone()) {
-                                v
-                            } else {
-                                self.set_var(var.clone(), Object::String(String::new()))
-                            };
+                            let var_obj = self.set_var(var.clone(), Object::String(String::new()));
                             match var_obj {
                                 Object::String(s) => {
                                     s.clear();
@@ -288,39 +311,6 @@ impl Interpreter {
                         }
                         self.exit_scope();
                     }
-                    Object::Number(num) => {
-                        self.enter_scope();
-                        let var_obj = if let Some(v) = self.get_var(var.clone()) {
-                            v.convert_to(Object::Number(0.0));
-                            match v {
-                                Object::Number(_) => v,
-                                _ => {
-                                    v.set_to(Object::Number(0.0));
-                                    v
-                                }
-                            }
-                        } else {
-                            self.set_var(var.clone(), Object::Number(0.0))
-                        };
-                        match var_obj {
-                            Object::Number(n) => {
-                                let mask = ((((*n < num) as i32) << 1) - 1) as f64;
-                                body.push(Tree::Assign(
-                                    Box::new(Tree::Ident(var.clone())),
-                                    Box::new(Tree::BinOp(
-                                        Box::new(Tree::Ident(var.clone())),
-                                        TokenType::Plus,
-                                        Box::new(Tree::Number(mask)),
-                                    )),
-                                ));
-                                while self.get_var(var.clone()).unwrap().get_number_value() != num {
-                                    self.body_block(&body);
-                                }
-                            }
-                            _ => {}
-                        }
-                        self.exit_scope();
-                    }
                     Object::List(list) => {
                         self.enter_scope();
                         for item in list {
@@ -330,7 +320,7 @@ impl Interpreter {
                         self.exit_scope();
                     }
                     _ => (),
-                }
+                };
                 Object::Null
             }
 
@@ -368,10 +358,8 @@ impl Interpreter {
     }
 
     fn body_block(&mut self, body: &Vec<Tree>) {
-        self.enter_scope();
         body.iter().for_each(|stmt| {
             self.interpret(stmt.clone());
         });
-        self.exit_scope();
     }
 }
