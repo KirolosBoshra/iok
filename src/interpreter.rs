@@ -388,33 +388,40 @@ impl Interpreter {
                             )),
                         ));
                         while self.get_var(var.clone()).unwrap().get_number_value() != end {
-                            return self.body_block(&body);
+                            for stmt in body.clone() {
+                                if let Object::Ret(expr) = self.interpret(stmt.clone()) {
+                                    self.exit_scope();
+                                    return Object::Ret(expr);
+                                }
+                            }
                         }
+                        self.exit_scope();
                     }
                     Object::String(string) => {
                         self.enter_scope();
                         for c in string.chars() {
-                            let var_obj = self.set_var(var.clone(), Object::String(String::new()));
-                            match var_obj {
-                                Object::String(s) => {
-                                    s.clear();
-                                    s.push(c);
-                                }
-                                _ => {
-                                    let mut tmp = String::new();
-                                    tmp.push(c);
-                                    self.set_var(var.clone(), Object::String(tmp));
+                            self.set_var(var.clone(), Object::String(c.to_string()));
+                            for stmt in body.clone() {
+                                if let Object::Ret(expr) = self.interpret(stmt.clone()) {
+                                    self.exit_scope();
+                                    return Object::Ret(expr);
                                 }
                             }
-                            return self.body_block(&body);
                         }
+                        self.exit_scope();
                     }
                     Object::List(list) => {
                         self.enter_scope();
                         for item in list {
                             self.set_var(var.clone(), item);
-                            return self.body_block(&body);
+                            for stmt in body.clone() {
+                                if let Object::Ret(expr) = self.interpret(stmt.clone()) {
+                                    self.exit_scope();
+                                    return Object::Ret(expr);
+                                }
+                            }
                         }
+                        self.exit_scope();
                     }
                     _ => (),
                 };
@@ -453,7 +460,7 @@ impl Interpreter {
             _ => None,
         }
     }
-
+    // Change this to Option
     fn body_block(&mut self, body: &Vec<Tree>) -> Object {
         for stmt in body.clone() {
             if let Object::Ret(expr) = self.interpret(stmt.clone()) {
