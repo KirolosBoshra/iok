@@ -11,7 +11,7 @@ pub enum Object {
     Ret(Box<Object>),
     Fn {
         name: String,
-        args: Vec<String>,
+        args: Vec<(String, Object)>,
         body: Vec<Tree>,
     },
     Null,

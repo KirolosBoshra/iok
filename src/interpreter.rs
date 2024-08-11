@@ -237,11 +237,17 @@ impl Interpreter {
 
             Tree::Fn { name, args, body } => {
                 // Extract argument names from the `args` vector
-                let args_names: Vec<String> = args
+                let args_names: Vec<(String, Object)> = args
                     .iter()
                     .filter_map(|arg| {
                         if let Tree::Ident(var) = arg {
-                            Some(var.clone())
+                            Some((var.clone(), Object::Null))
+                        } else if let Tree::Assign(var, expr) = arg {
+                            if let Tree::Ident(name) = *var.clone() {
+                                Some((name, self.interpret(*expr.clone())))
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
@@ -278,10 +284,16 @@ impl Interpreter {
                     self.enter_scope();
 
                     // Bind the function arguments to their corresponding values
+                    for arg in args.clone() {
+                        self.set_var(arg.0, arg.1);
+                    }
+
                     for (i, arg) in call_args.iter().enumerate() {
                         let arg_obj = self.interpret(arg.clone());
                         if i < args.len() {
-                            self.set_var(args[i].clone(), arg_obj);
+                            self.set_var(args[i].clone().0, arg_obj);
+                        } else {
+                            return Object::Invalid;
                         }
                     }
 

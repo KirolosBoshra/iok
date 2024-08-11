@@ -221,7 +221,7 @@ impl Parser {
         }
         body
     }
-    
+
     // TODO Use this in all functions
     // Helper function to check and consume the expected token
     fn expect_token(
@@ -323,7 +323,7 @@ impl Parser {
                         iter.next();
                     }
                     _ => {
-                        args.push(self.parse_factor(iter));
+                        args.push(self.parse_expression(iter));
                     }
                 }
             }

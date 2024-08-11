@@ -9,6 +9,10 @@ fn div(a, b) => {
   ret a / b
 }
 
+fn inc(a, b=1) => ret a + b
+
 let x = add(2, 3)
+
+let y = inc(x)
 
 dbg(x)
