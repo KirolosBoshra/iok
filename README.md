@@ -7,7 +7,7 @@
 Task  | Implemented
 ------------- | -------------
 Lists | ✅
-Functions | ❕ TODO: Default value for args
+Functions | ✅
 Struct / Class |  ❌
 
 ## Syntax :
