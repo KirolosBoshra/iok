@@ -1,0 +1,14 @@
+fn add(a, b) => ret a+b
+
+fn mul(a, b) => ret a*b
+
+fn div(a, b) => {
+  if b == 0 {
+    ret null
+  }
+  ret a / b
+}
+
+let x = add(2, 3)
+
+dbg(x)

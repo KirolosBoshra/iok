@@ -2,7 +2,7 @@ use crate::lexer::{Loc, Token, TokenType};
 use crate::logger::{ErrorType, Logger};
 use std::iter::Peekable;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Tree {
     Number(f64),
     Bool(bool),
@@ -11,6 +11,11 @@ pub enum Tree {
     Ident(String),
     ListCall(Box<Tree>, Box<Tree>),
     Empty(),
+    FnCall {
+        name: String,
+        args: Vec<Tree>,
+    },
+    Ret(Box<Tree>),
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Range(Box<Tree>, Box<Tree>),
@@ -35,6 +40,11 @@ pub enum Tree {
     For {
         var: String,
         expr: Box<Tree>,
+        body: Vec<Tree>,
+    },
+    Fn {
+        name: String,
+        args: Vec<Tree>,
         body: Vec<Tree>,
     },
 }
@@ -211,36 +221,38 @@ impl Parser {
         }
         body
     }
-
+    
+    // TODO Use this in all functions
     // Helper function to check and consume the expected token
-    // fn expect_token(
-    //     &mut self,
-    //     iter: &mut Peekable<std::slice::Iter<Token>>,
-    //     expected: TokenType,
-    // ) -> bool {
-    //     if let Some(token) = iter.peek() {
-    //         if token.token == expected {
-    //             iter.next(); // Consume the expected token
-    //             return true;
-    //         } else {
-    //             Logger::error(
-    //                 &format!(
-    //                     "Expected token: {:?}, but found: {:?}",
-    //                     expected, token.token
-    //                 ),
-    //                 token.loc,
-    //                 ErrorType::Parsing,
-    //             );
-    //         }
-    //     } else {
-    //         Logger::error(
-    //             &format!("Expected token: {:?}, but reached end of input", expected),
-    //             self.prev_token.loc,
-    //             ErrorType::Parsing,
-    //         );
-    //     }
-    //     false
-    // }
+    fn expect_token(
+        &mut self,
+        iter: &mut Peekable<std::slice::Iter<Token>>,
+        expected: TokenType,
+    ) -> Option<TokenType> {
+        if let Some(&token) = iter.peek() {
+            if std::mem::discriminant(&token.token) == std::mem::discriminant(&expected) {
+                self.prev_token = token.clone();
+                iter.next();
+                return Some(token.token.clone());
+            } else {
+                Logger::error(
+                    &format!(
+                        "Expected token: {:?}, but found: {:?}",
+                        expected, token.token
+                    ),
+                    token.loc,
+                    ErrorType::Parsing,
+                );
+            }
+        } else {
+            Logger::error(
+                &format!("Expected token: {:?}, but reached end of input", expected),
+                self.prev_token.loc,
+                ErrorType::Parsing,
+            );
+        }
+        None
+    }
 
     fn next_case(
         &mut self,
@@ -298,6 +310,32 @@ impl Parser {
         items
     }
 
+    fn parse_args(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
+        let mut args = vec![];
+        if self.expect_token(iter, TokenType::OpenParen).is_some() {
+            while let Some(item) = iter.peek() {
+                match item.token {
+                    TokenType::CloseParen => {
+                        iter.next();
+                        return args;
+                    }
+                    TokenType::Comma => {
+                        iter.next();
+                    }
+                    _ => {
+                        args.push(self.parse_factor(iter));
+                    }
+                }
+            }
+            Logger::error(
+                "Expected ) Or Items (Args,..)",
+                self.prev_token.loc,
+                ErrorType::Parsing,
+            );
+        }
+        args
+    }
+
     fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
         if let Some(it) = iter.next() {
             match &it.token {
@@ -308,7 +346,18 @@ impl Parser {
                     let expr = self.parse_expression(iter);
                     Tree::CmpOp(Box::new(expr), TokenType::Bang, Box::new(Tree::Empty()))
                 }
-                TokenType::Ident(string) => Tree::Ident(string.to_string()),
+                TokenType::Ident(string) => {
+                    if let Some(p) = iter.peek() {
+                        if p.token == TokenType::OpenParen {
+                            let args = self.parse_args(iter);
+                            return Tree::FnCall {
+                                name: string.to_string(),
+                                args,
+                            };
+                        }
+                    }
+                    Tree::Ident(string.to_string())
+                }
                 TokenType::String(string) => Tree::String(
                     // i could use a crate for that  ig if i wanna use unicodes
                     string
@@ -330,6 +379,10 @@ impl Parser {
                         TokenType::Minus,
                         Box::new(factor),
                     )
+                }
+                TokenType::Ret => {
+                    self.prev_token = it.clone();
+                    Tree::Ret(Box::new(self.parse_expression(iter)))
                 }
                 TokenType::OpenParen => match iter.peek().unwrap().token {
                     TokenType::CloseParen => {
@@ -417,8 +470,6 @@ impl Parser {
                     Tree::While { expr, body }
                 }
                 TokenType::For => match &iter.next().unwrap().token {
-                    // TODO Change Syntax to
-                    // for i -> 0..12 {}
                     TokenType::Ident(var) => match &iter.peek().unwrap().token {
                         TokenType::ThinArrow => {
                             iter.next();
@@ -445,6 +496,26 @@ impl Parser {
                         Tree::Empty()
                     }
                 },
+                TokenType::Fn => {
+                    if let Some(TokenType::Ident(name)) =
+                        self.expect_token(iter, TokenType::Ident(String::new()))
+                    {
+                        let args = self.parse_args(iter);
+                        let mut body = vec![];
+                        if self.expect_token(iter, TokenType::FatArrow).is_some() {
+                            if let Some(next) = iter.peek() {
+                                match next.token {
+                                    TokenType::OpenCurly => {
+                                        body = self.parse_block(iter);
+                                    }
+                                    _ => body.push(self.parse_expression(iter)),
+                                }
+                            }
+                        }
+                        return Tree::Fn { name, args, body };
+                    };
+                    Tree::Empty()
+                }
                 TokenType::Exit => {
                     let expr = self.parse_factor(iter);
                     Tree::Exit(Box::new(expr))

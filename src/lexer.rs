@@ -40,6 +40,7 @@ pub enum TokenType {
     Dot,
     DDot,
     ThinArrow,
+    FatArrow,
     Let,
     Exit,
     Ident(String),
@@ -48,6 +49,8 @@ pub enum TokenType {
     ElsIf,
     While,
     For,
+    Fn,
+    Ret,
     Dbg,
 }
 
@@ -121,6 +124,14 @@ impl<'a> Lexer<'a> {
                             token: TokenType::For,
                             loc: self.curr_loc,
                         }),
+                        "fn" => tokens.push(Token {
+                            token: TokenType::Fn,
+                            loc: self.curr_loc,
+                        }),
+                        "ret" => tokens.push(Token {
+                            token: TokenType::Ret,
+                            loc: self.curr_loc,
+                        }),
                         "true" => tokens.push(Token {
                             token: TokenType::Bool(true),
                             loc: self.curr_loc,
@@ -144,7 +155,6 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '0'..='9' => {
-                    //THIS UGLY also
                     let mut number = String::new();
                     while let Some(&c) = self.iter.peek() {
                         if c.is_digit(10) || (c == '.' && self.iter.clone().nth(1) != Some('.')) {
@@ -302,17 +312,29 @@ impl<'a> Lexer<'a> {
                 }
                 '=' => {
                     self.next();
-                    if *self.iter.peek().unwrap_or(&' ') == '=' {
-                        tokens.push(Token {
-                            token: TokenType::EquEqu,
-                            loc: self.curr_loc,
-                        });
-                        self.next();
-                    } else {
-                        tokens.push(Token {
-                            token: TokenType::Equal,
-                            loc: self.curr_loc,
-                        });
+                    if let Some(c) = self.iter.peek() {
+                        match c {
+                            '=' => {
+                                tokens.push(Token {
+                                    token: TokenType::EquEqu,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            '>' => {
+                                tokens.push(Token {
+                                    token: TokenType::FatArrow,
+                                    loc: self.curr_loc,
+                                });
+                                self.next();
+                            }
+                            _ => {
+                                tokens.push(Token {
+                                    token: TokenType::Equal,
+                                    loc: self.curr_loc,
+                                });
+                            }
+                        }
                     }
                 }
                 '!' => {

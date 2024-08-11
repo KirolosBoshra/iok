@@ -1,17 +1,25 @@
 # IOk
 ![logo](./img/logo.png)
 ## An Interperted Language made in rust
-## NOT READY YET ❗❗❗
+### NOT READY YET ❗❗❗
 
 ## TODO
 Task  | Implemented
 ------------- | -------------
 Lists | ✅
-Functions |  ❌
+Functions | ❕ TODO: Default value for args
 Struct / Class |  ❌
 
 ## Syntax :
 ```javascript
+// Functions
+fn add(a, b) => ret a+b
+fn div(a, b) => {
+    if b == 0 {
+        ret null
+    }
+    ret a/b
+}
 // Vars
 let x = 0
 let y = 0

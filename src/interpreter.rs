@@ -1,6 +1,6 @@
 use crate::{lexer::TokenType, object::Object, parser::Tree};
 use core::iter::Iterator;
-use std::{collections::HashMap, usize};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -173,6 +173,7 @@ impl Interpreter {
             Tree::ListCall(var, index) => self
                 .interpret(*var)
                 .get_list_index(self.interpret(*index).to_number_obj().get_number_value() as usize),
+            Tree::Ret(expr) => Object::Ret(Box::new(self.interpret(*expr))),
             Tree::BinOp(left, op, right) => {
                 let left_obj = self.interpret(*left);
                 let right_obj = self.interpret(*right);
@@ -185,18 +186,38 @@ impl Interpreter {
             }
 
             Tree::Let(var, value) => {
-                let value_obj = self.interpret(*value);
-                self.set_var(var.clone(), value_obj);
-                self.get_var(var).unwrap_or(&mut Object::Null).clone()
+                let v_obj = self.interpret(*value.clone());
+                let value_obj = if let Object::Ret(expr) = v_obj {
+                    *expr
+                } else {
+                    v_obj
+                };
+                self.set_var(var.clone(), value_obj).clone()
             }
             Tree::Assign(var, value) => {
-                let value_obj = self.interpret(*value.clone());
+                let v_obj = self.interpret(*value.clone());
+                let value_obj = if let Object::Ret(expr) = v_obj {
+                    *expr
+                } else {
+                    v_obj
+                };
                 match *var {
                     Tree::Ident(name) => {
                         for scope in self.scopes.iter_mut().rev() {
                             if scope.contains_key(&name) {
-                                scope.insert(name, value_obj.clone());
-                                return value_obj;
+                                match scope.get(&name).unwrap() {
+                                    Object::Fn {
+                                        name: _,
+                                        args: _,
+                                        body: _,
+                                    } => {
+                                        return Object::Invalid;
+                                    }
+                                    _ => {
+                                        scope.insert(name, value_obj.clone());
+                                        return value_obj;
+                                    }
+                                }
                             }
                         }
                     }
@@ -214,54 +235,121 @@ impl Interpreter {
                 Object::Null
             }
 
+            Tree::Fn { name, args, body } => {
+                // Extract argument names from the `args` vector
+                let args_names: Vec<String> = args
+                    .iter()
+                    .filter_map(|arg| {
+                        if let Tree::Ident(var) = arg {
+                            Some(var.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                // Return `Object::Invalid` if any argument is not an identifier
+                if args_names.len() != args.len() {
+                    return Object::Invalid;
+                }
+
+                // Set the function object in the environment
+                self.set_var(
+                    name.clone(),
+                    Object::Fn {
+                        name,
+                        args: args_names,
+                        body,
+                    },
+                )
+                .clone()
+            }
+
+            Tree::FnCall {
+                name,
+                args: call_args,
+            } => {
+                // Interpret the function name to get the function object
+                let fn_obj = self.interpret(Tree::Ident(name));
+
+                // Ensure the object is a function
+                if let Object::Fn { args, body, .. } = fn_obj {
+                    // Enter a new scope for the function call
+                    self.enter_scope();
+
+                    // Bind the function arguments to their corresponding values
+                    for (i, arg) in call_args.iter().enumerate() {
+                        let arg_obj = self.interpret(arg.clone());
+                        if i < args.len() {
+                            self.set_var(args[i].clone(), arg_obj);
+                        }
+                    }
+
+                    // Execute the function body
+                    for stmt in body {
+                        let result = self.interpret(stmt);
+                        if let Object::Ret(expr) = result {
+                            self.exit_scope();
+                            return *expr;
+                        }
+                    }
+
+                    // Exit the scope after the function body is executed
+                    self.exit_scope();
+                    Object::Null
+                } else {
+                    Object::Invalid
+                }
+            }
+
             Tree::If {
                 expr,
                 body,
                 els,
                 els_ifs,
             } => {
+                // Interpret the condition expression
                 let expr_obj = self.interpret(*expr);
-                //TODO THIS SO UGLY
+
+                // If the condition is true, execute the 'if' block
                 if expr_obj.to_bool_obj().get_bool_value() {
                     self.enter_scope();
-                    body.iter().for_each(|stmt| {
-                        self.interpret(stmt.clone());
-                    });
-                    self.exit_scope();
-                    expr_obj
-                } else {
-                    for stmt in els_ifs {
-                        match stmt {
-                            Tree::ElsIf { expr, body } => {
-                                let expr_stmt_obj = self.interpret(*expr);
-                                if expr_stmt_obj.to_bool_obj().get_bool_value() {
-                                    self.enter_scope();
-                                    body.iter().for_each(|tree| {
-                                        self.interpret(tree.clone());
-                                    });
-                                    self.exit_scope();
-                                    return expr_stmt_obj;
-                                }
-                            }
-                            _ => (),
+                    return self.body_block(&body);
+                }
+
+                // If the condition is false, check the 'else if' branches
+                for elsif in els_ifs {
+                    if let Tree::ElsIf {
+                        expr,
+                        body: elsif_body,
+                    } = elsif
+                    {
+                        let expr_stmt_obj = self.interpret(*expr);
+                        if expr_stmt_obj.to_bool_obj().get_bool_value() {
+                            return self.body_block(&elsif_body);
                         }
                     }
-                    if !els.is_empty() {
-                        self.enter_scope();
-                        els.iter().for_each(|tree| {
-                            self.interpret(tree.clone());
-                        });
-                        self.exit_scope();
-                    }
-                    Object::Bool(false)
                 }
+
+                // If no 'else if' branch was true, execute the 'else' block if it exists
+                if !els.is_empty() {
+                    self.enter_scope();
+                    return self.body_block(&els);
+                }
+
+                Object::Null
             }
 
             Tree::While { expr, body } => {
                 let mut expr_obj = self.interpret(*expr.clone());
                 self.enter_scope();
                 while expr_obj.to_bool_obj().get_bool_value() {
-                    self.body_block(&body);
+                    for stmt in body.clone() {
+                        if let Object::Ret(expr) = self.interpret(stmt.clone()) {
+                            self.exit_scope();
+                            return Object::Ret(expr);
+                        }
+                    }
                     expr_obj = self.interpret(*expr.clone());
                 }
                 self.exit_scope();
@@ -288,9 +376,8 @@ impl Interpreter {
                             )),
                         ));
                         while self.get_var(var.clone()).unwrap().get_number_value() != end {
-                            self.body_block(&body);
+                            return self.body_block(&body);
                         }
-                        self.exit_scope();
                     }
                     Object::String(string) => {
                         self.enter_scope();
@@ -307,17 +394,15 @@ impl Interpreter {
                                     self.set_var(var.clone(), Object::String(tmp));
                                 }
                             }
-                            self.body_block(&body);
+                            return self.body_block(&body);
                         }
-                        self.exit_scope();
                     }
                     Object::List(list) => {
                         self.enter_scope();
                         for item in list {
                             self.set_var(var.clone(), item);
-                            self.body_block(&body);
+                            return self.body_block(&body);
                         }
-                        self.exit_scope();
                     }
                     _ => (),
                 };
@@ -357,9 +442,14 @@ impl Interpreter {
         }
     }
 
-    fn body_block(&mut self, body: &Vec<Tree>) {
-        body.iter().for_each(|stmt| {
-            self.interpret(stmt.clone());
-        });
+    fn body_block(&mut self, body: &Vec<Tree>) -> Object {
+        for stmt in body.clone() {
+            if let Object::Ret(expr) = self.interpret(stmt.clone()) {
+                self.exit_scope();
+                return Object::Ret(expr);
+            }
+        }
+        self.exit_scope();
+        Object::Null
     }
 }

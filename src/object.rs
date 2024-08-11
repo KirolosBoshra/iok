@@ -1,3 +1,4 @@
+use crate::parser::Tree;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
 use std::{fmt, ops::BitOr};
 #[derive(Clone, Debug, PartialEq)]
@@ -7,6 +8,12 @@ pub enum Object {
     Bool(bool),
     List(Vec<Object>),
     Range(f64, f64),
+    Ret(Box<Object>),
+    Fn {
+        name: String,
+        args: Vec<String>,
+        body: Vec<Tree>,
+    },
     Null,
     Invalid,
 }
@@ -41,14 +48,14 @@ impl Object {
             _ => Object::Bool(false),
         }
     }
-    pub fn convert_to(&mut self, other: Self) {
-        match other {
-            Object::String(_) => *self = self.to_string_obj(),
-            Object::Number(_) => *self = self.to_number_obj(),
-            Object::Bool(_) => *self = self.to_bool_obj(),
-            _ => {}
-        }
-    }
+    // pub fn convert_to(&mut self, other: Self) {
+    //     match other {
+    //         Object::String(_) => *self = self.to_string_obj(),
+    //         Object::Number(_) => *self = self.to_number_obj(),
+    //         Object::Bool(_) => *self = self.to_bool_obj(),
+    //         _ => {}
+    //     }
+    // }
     pub fn set_to(&mut self, value: Self) {
         *self = value;
     }
@@ -117,7 +124,13 @@ impl fmt::Display for Object {
                 write!(f, "[{}]", list_str.join(", "))
             }
             Object::Range(s, e) => write!(f, "{s}..{e}"),
-            Object::Null => write!(f, ""),
+            Object::Ret(o) => write!(f, "Ret({o})"),
+            Object::Fn {
+                name,
+                args,
+                body: _,
+            } => write!(f, "fn: {name}, {:?}", args),
+            Object::Null => write!(f, "null"),
             Object::Invalid => write!(f, "invalid"),
         }
     }
