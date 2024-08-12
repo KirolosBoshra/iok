@@ -9,6 +9,7 @@ Task  | Implemented
 Lists | ✅
 Functions | ✅
 Struct / Class |  ❌
+Optimize | ❌
 
 ## Syntax :
 ```javascript

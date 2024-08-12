@@ -2,6 +2,8 @@ use crate::{lexer::TokenType, object::Object, parser::Tree};
 use core::iter::Iterator;
 use std::collections::HashMap;
 
+// TODO IMPORTENT Use Rc<RefCell<Object>> Smart Pointers
+
 #[derive(Debug)]
 pub struct Interpreter {
     scopes: Vec<HashMap<String, Object>>,
@@ -26,125 +28,120 @@ impl Interpreter {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name.clone(), value);
         }
-        self.get_var(name.clone()).unwrap()
+        self.get_var(name).unwrap()
     }
 
     fn get_var(&mut self, name: String) -> Option<&mut Object> {
-        self.scopes
-            .iter_mut()
-            .rev()
-            .find_map(|scope| scope.get_mut(&name))
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(value) = scope.get_mut(&name) {
+                return Some(value);
+            }
+        }
+        None
     }
-    //TODO move this to Object Struct
+
     fn bin_op(&self, left: Object, op: TokenType, right: Object) -> Object {
+        use Object::Invalid;
+        use Object::List;
+        use Object::Null;
+        use Object::Number;
+        use Object::String;
+        use TokenType::*;
+
         match op {
-            TokenType::Plus => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    Object::Number(left_num + right_num)
-                }
-                (Object::Number(left_num), Object::String(right_string)) => {
-                    Object::String(left_num.to_string() + &right_string)
-                }
-                (Object::String(left_string), Object::Number(right_num)) => {
-                    Object::String(left_string + &right_num.to_string())
-                }
-                (Object::String(left_string), Object::String(right_string)) => {
-                    Object::String(left_string + &right_string)
-                }
-                _ => Object::Null,
+            Plus => match (left, right) {
+                (Number(l), Number(r)) => Number(l + r),
+                (Number(l), String(r)) | (String(r), Number(l)) => String(format!("{l}{r}")),
+                (String(l), String(r)) => String(l + &r),
+                _ => Null,
             },
-            TokenType::Minus => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    Object::Number(left_num - right_num)
+            Minus => match (left, right) {
+                (Number(l), Number(r)) => Number(l - r),
+                (String(l), Number(r)) if l.len() >= r as usize => {
+                    String(l[..l.len() - r as usize].to_string())
                 }
-                (Object::String(left_string), Object::Number(right_num)) => {
-                    if left_string.len() < right_num as usize {
-                        return Object::Invalid;
-                    }
-                    Object::String(
-                        left_string[..left_string.len() - right_num as usize].to_string(),
-                    )
-                }
-                (Object::String(left_string), Object::String(right_string)) => {
-                    Object::String(left_string.replace(&right_string, ""))
-                }
-                _ => Object::Null,
+                (String(l), String(r)) => String(l.replace(&r, "")),
+                _ => Null,
             },
-            TokenType::Multiply => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    Object::Number(left_num * right_num)
-                }
-                (Object::Number(left_num), Object::String(right_string)) => {
-                    Object::String(right_string.repeat(left_num as usize))
-                }
-                (Object::String(left_string), Object::Number(right_num)) => {
-                    Object::String(left_string.repeat(right_num as usize))
-                }
-                (Object::List(ref list), Object::Number(num)) => {
-                    let mut new_list = vec![];
-                    for _ in 0..num as usize {
-                        for item in list {
-                            new_list.push(item.clone());
-                        }
-                    }
-                    Object::List(new_list)
-                }
-                _ => Object::Null,
+            Multiply => match (left, right) {
+                (Number(l), Number(r)) => Number(l * r),
+                (Number(l), String(r)) | (String(r), Number(l)) => String(r.repeat(l as usize)),
+                (List(ref l), Number(r)) => List(
+                    l.iter()
+                        .cycle()
+                        .take(l.len() * r as usize)
+                        .cloned()
+                        .collect(),
+                ),
+                _ => Null,
             },
-            TokenType::Divide => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    if right_num != 0.0 {
-                        Object::Number(left_num / right_num)
-                    } else {
-                        Object::Invalid
-                    }
-                }
-                _ => Object::Null,
+            Divide => match (left, right) {
+                (Number(l), Number(r)) if r != 0.0 => Number(l / r),
+                _ => Invalid,
             },
-            TokenType::BitAnd => left & right,
-            TokenType::BitOR => left | right,
-            TokenType::Shl => left << right,
-            TokenType::Shr => left >> right,
-            _ => Object::Invalid,
+            BitAnd => left & right,
+            BitOR => left | right,
+            Shl => left << right,
+            Shr => left >> right,
+            _ => Invalid,
         }
     }
 
     fn cmp_op(&self, left: Object, op: TokenType, right: Object) -> Object {
+        use Object::{Bool, Number};
+
         match op {
-            TokenType::EquEqu => Object::Bool(left == right),
-            TokenType::NotEqu => Object::Bool(left != right),
-            TokenType::Greater => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    Object::Bool(left_num > right_num)
+            // Direct equality and inequality checks
+            TokenType::EquEqu => return Bool(left == right),
+            TokenType::NotEqu => return Bool(left != right),
+
+            // Lazy evaluation for greater/less comparison
+            TokenType::Greater => {
+                if let (Number(left_num), Number(right_num)) = (left, right) {
+                    return Bool(left_num > right_num);
                 }
-                _ => Object::Bool(false),
-            },
-            TokenType::GreatEqu => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    Object::Bool(left_num >= right_num)
+                Bool(false)
+            }
+            TokenType::GreatEqu => {
+                if let (Number(left_num), Number(right_num)) = (left, right) {
+                    return Bool(left_num >= right_num);
                 }
-                _ => Object::Bool(false),
-            },
-            TokenType::Less => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    Object::Bool(left_num < right_num)
+                Bool(false)
+            }
+            TokenType::Less => {
+                if let (Number(left_num), Number(right_num)) = (left, right) {
+                    return Bool(left_num < right_num);
                 }
-                _ => Object::Bool(false),
-            },
-            TokenType::LessEqu => match (left, right) {
-                (Object::Number(left_num), Object::Number(right_num)) => {
-                    Object::Bool(left_num <= right_num)
+                Bool(false)
+            }
+            TokenType::LessEqu => {
+                if let (Number(left_num), Number(right_num)) = (left, right) {
+                    return Bool(left_num <= right_num);
                 }
-                _ => Object::Bool(false),
-            },
-            TokenType::Bang => Object::Bool(!left),
-            TokenType::And => Object::Bool(
-                left.to_bool_obj().get_bool_value() && right.to_bool_obj().get_bool_value(),
-            ),
-            TokenType::Or => Object::Bool(
-                left.to_bool_obj().get_bool_value() || right.to_bool_obj().get_bool_value(),
-            ),
-            _ => Object::Bool(false),
+                Bool(false)
+            }
+
+            // Logical NOT, AND, OR operations
+            TokenType::Bang => return Bool(!left),
+            TokenType::And => {
+                // Short-circuit evaluation for `&&` operation
+                if left.to_bool_obj().get_bool_value() {
+                    return Bool(right.to_bool_obj().get_bool_value());
+                } else {
+                    return Bool(false);
+                }
+            }
+            TokenType::Or => {
+                // Short-circuit evaluation for `||` operation
+                if left.to_bool_obj().get_bool_value() {
+                    return Bool(true);
+                } else {
+                    return Bool(right.to_bool_obj().get_bool_value());
+                }
+            }
+
+            // Default case if none of the above match
+            _ => Bool(false),
         }
     }
 
@@ -194,124 +191,102 @@ impl Interpreter {
                 };
                 self.set_var(var.clone(), value_obj).clone()
             }
+
             Tree::Assign(var, value) => {
-                let v_obj = self.interpret(*value.clone());
-                let value_obj = if let Object::Ret(expr) = v_obj {
-                    *expr
-                } else {
-                    v_obj
-                };
+                let mut value_obj = self.interpret(*value);
+
+                if let Object::Ret(expr) = value_obj {
+                    value_obj = *expr;
+                }
+
                 match *var {
-                    Tree::Ident(name) => {
+                    Tree::Ident(ref name) => {
                         for scope in self.scopes.iter_mut().rev() {
-                            if scope.contains_key(&name) {
-                                match scope.get(&name).unwrap() {
-                                    Object::Fn {
-                                        name: _,
-                                        args: _,
-                                        body: _,
-                                    } => {
-                                        return Object::Invalid;
-                                    }
-                                    _ => {
-                                        scope.insert(name, value_obj.clone());
-                                        return value_obj;
-                                    }
+                            if let Some(existing_value) = scope.get(name) {
+                                if matches!(existing_value, Object::Fn { .. }) {
+                                    return Object::Invalid;
                                 }
+                                scope.insert(name.clone(), value_obj.clone());
                             }
                         }
                     }
-                    Tree::ListCall(var, index) => {
+                    Tree::ListCall(ref var, index) => {
                         let index_num =
                             self.interpret(*index).to_number_obj().get_number_value() as usize;
 
-                        if let Some(var_obj) = self.interpret_mut(*var) {
-                            var_obj.set_list_index(index_num, value_obj);
-                            return var_obj.clone();
+                        if let Some(var_obj) = self.interpret_mut(*var.clone()) {
+                            var_obj.set_list_index(index_num, value_obj.clone());
                         }
                     }
                     _ => {}
                 }
+
                 Object::Null
             }
 
             Tree::Fn { name, args, body } => {
-                // Extract argument names from the `args` vector
                 let args_names: Vec<(String, Object)> = args
                     .iter()
-                    .filter_map(|arg| {
-                        if let Tree::Ident(var) = arg {
-                            Some((var.clone(), Object::Null))
-                        } else if let Tree::Assign(var, expr) = arg {
+                    .filter_map(|arg| match arg {
+                        Tree::Ident(var) => Some((var.clone(), Object::Null)),
+                        Tree::Assign(var, expr) => {
                             if let Tree::Ident(name) = *var.clone() {
                                 Some((name, self.interpret(*expr.clone())))
                             } else {
                                 None
                             }
-                        } else {
-                            None
                         }
+                        _ => None,
                     })
                     .collect();
 
-                // Return `Object::Invalid` if any argument is not an identifier
+                // Return `Object::Invalid` if the argument extraction fails
                 if args_names.len() != args.len() {
                     return Object::Invalid;
                 }
 
-                // Set the function object in the environment
-                self.set_var(
-                    name.clone(),
-                    Object::Fn {
-                        name,
-                        args: args_names,
-                        body,
-                    },
-                )
-                .clone()
+                // Create and set the function object in the environment
+                let function = Object::Fn {
+                    name: name.clone(),
+                    args: args_names,
+                    body,
+                };
+                self.set_var(name.clone(), function.clone());
+
+                function
             }
 
             Tree::FnCall {
                 name,
                 args: call_args,
             } => {
-                // Interpret the function name to get the function object
-                let fn_obj = self.interpret(Tree::Ident(name));
-
-                // Ensure the object is a function
-                if let Object::Fn { args, body, .. } = fn_obj {
+                // Attempt to retrieve the function object
+                let obj = self.interpret(Tree::Ident(name));
+                if let Object::Fn { args, body, .. } = obj {
                     // Enter a new scope for the function call
                     self.enter_scope();
 
-                    // Bind the function arguments to their corresponding values
-                    for arg in args.clone() {
-                        self.set_var(arg.0, arg.1);
-                    }
-
-                    for (i, arg) in call_args.iter().enumerate() {
-                        let arg_obj = self.interpret(arg.clone());
-                        if i < args.len() {
-                            self.set_var(args[i].clone().0, arg_obj);
+                    // Bind default arguments and interpret call arguments
+                    for (i, (arg_name, default_value)) in args.iter().enumerate() {
+                        let value = if i < call_args.len() {
+                            self.interpret(call_args[i].clone())
                         } else {
-                            return Object::Invalid;
-                        }
+                            default_value.clone()
+                        };
+                        self.set_var(arg_name.clone(), value);
                     }
 
                     // Execute the function body
-                    for stmt in body {
-                        let result = self.interpret(stmt);
-                        if let Object::Ret(expr) = result {
-                            self.exit_scope();
-                            return *expr;
-                        }
-                    }
+                    let result = self.evaluate_block_with_scope(&body);
 
-                    // Exit the scope after the function body is executed
-                    self.exit_scope();
-                    Object::Null
-                } else {
-                    Object::Invalid
+                    // Return result or Object::Null
+                    return match result {
+                        Object::Ret(expr) => *expr,
+                        _ => Object::Null,
+                    };
                 }
+
+                Object::Invalid
             }
 
             Tree::If {
@@ -320,111 +295,69 @@ impl Interpreter {
                 els,
                 els_ifs,
             } => {
-                // Interpret the condition expression
-                let expr_obj = self.interpret(*expr);
-
-                // If the condition is true, execute the 'if' block
-                if expr_obj.to_bool_obj().get_bool_value() {
-                    self.enter_scope();
+                // Evaluate the main `if` condition
+                self.enter_scope();
+                if self.interpret(*expr).to_bool_obj().get_bool_value() {
                     return self.body_block(&body);
                 }
 
-                // If the condition is false, check the 'else if' branches
+                // Evaluate any `else if` conditions
                 for elsif in els_ifs {
-                    if let Tree::ElsIf {
-                        expr,
-                        body: elsif_body,
-                    } = elsif
-                    {
-                        let expr_stmt_obj = self.interpret(*expr);
-                        if expr_stmt_obj.to_bool_obj().get_bool_value() {
-                            return self.body_block(&elsif_body);
+                    if let Tree::ElsIf { expr, body } = elsif {
+                        if self.interpret(*expr).to_bool_obj().get_bool_value() {
+                            return self.body_block(&body);
                         }
                     }
                 }
 
-                // If no 'else if' branch was true, execute the 'else' block if it exists
+                // If no conditions are true, evaluate the `else` block if it exists
                 if !els.is_empty() {
-                    self.enter_scope();
                     return self.body_block(&els);
-                }
-
-                Object::Null
-            }
-
-            Tree::While { expr, body } => {
-                let mut expr_obj = self.interpret(*expr.clone());
-                self.enter_scope();
-                while expr_obj.to_bool_obj().get_bool_value() {
-                    for stmt in body.clone() {
-                        if let Object::Ret(expr) = self.interpret(stmt.clone()) {
-                            self.exit_scope();
-                            return Object::Ret(expr);
-                        }
-                    }
-                    expr_obj = self.interpret(*expr.clone());
                 }
                 self.exit_scope();
                 Object::Null
             }
 
+            Tree::While { expr, body } => {
+                self.enter_scope();
+
+                while self.interpret(*expr.clone()).to_bool_obj().get_bool_value() {
+                    if let Some(ret) = self.execute_body(&body) {
+                        self.exit_scope();
+                        return ret;
+                    }
+                }
+
+                self.exit_scope();
+                Object::Null
+            }
+
             Tree::For {
-                var,
+                ref var,
                 expr,
-                mut body,
+                ref body,
             } => {
-                let expr_obj = self.interpret(*expr.clone());
-                match expr_obj {
-                    Object::Range(start, end) => {
-                        self.enter_scope();
-                        self.set_var(var.clone(), Object::Number(start));
-                        let mask = ((((start < end) as i32) << 1) - 1) as f64;
-                        body.push(Tree::Assign(
-                            Box::new(Tree::Ident(var.clone())),
-                            Box::new(Tree::BinOp(
-                                Box::new(Tree::Ident(var.clone())),
-                                TokenType::Plus,
-                                Box::new(Tree::Number(mask)),
-                            )),
-                        ));
-                        while self.get_var(var.clone()).unwrap().get_number_value() != end {
-                            for stmt in body.clone() {
-                                if let Object::Ret(expr) = self.interpret(stmt.clone()) {
-                                    self.exit_scope();
-                                    return Object::Ret(expr);
-                                }
-                            }
-                        }
-                        self.exit_scope();
+                let obj = self.interpret(*expr);
+                let iter: Box<dyn Iterator<Item = Object>> = match obj {
+                    Object::Range(start, end) => Box::new(
+                        ((start as i32)..(end as i32)).map(|n: i32| Object::Number(n as f64)),
+                    ),
+                    Object::String(ref string) => {
+                        Box::new(string.chars().map(|c| Object::String(c.to_string())))
                     }
-                    Object::String(string) => {
-                        self.enter_scope();
-                        for c in string.chars() {
-                            self.set_var(var.clone(), Object::String(c.to_string()));
-                            for stmt in body.clone() {
-                                if let Object::Ret(expr) = self.interpret(stmt.clone()) {
-                                    self.exit_scope();
-                                    return Object::Ret(expr);
-                                }
-                            }
-                        }
-                        self.exit_scope();
-                    }
-                    Object::List(list) => {
-                        self.enter_scope();
-                        for item in list {
-                            self.set_var(var.clone(), item);
-                            for stmt in body.clone() {
-                                if let Object::Ret(expr) = self.interpret(stmt.clone()) {
-                                    self.exit_scope();
-                                    return Object::Ret(expr);
-                                }
-                            }
-                        }
-                        self.exit_scope();
-                    }
-                    _ => (),
+                    Object::List(list) => Box::new(list.into_iter()),
+                    _ => return Object::Null,
                 };
+
+                self.enter_scope();
+                for item in iter {
+                    self.set_var(var.to_string(), item);
+                    if let Some(ret) = self.execute_body(body) {
+                        self.exit_scope();
+                        return ret;
+                    }
+                }
+                self.exit_scope();
                 Object::Null
             }
 
@@ -450,25 +383,50 @@ impl Interpreter {
     // A Helper Method to mut Objects
     fn interpret_mut(&mut self, tree: Tree) -> Option<&mut Object> {
         match tree {
-            Tree::Ident(name) => self.get_var(name),
+            Tree::Ident(name) => self.get_var(name), // Return a mutable reference to the variable
             Tree::ListCall(list, index) => {
                 let index_num = self.interpret(*index).to_number_obj().get_number_value() as usize;
-                self.interpret_mut(*list)
-                    .unwrap()
-                    .get_list_index_mut(index_num)
+                if let Some(list_obj) = self.interpret_mut(*list) {
+                    // Get a mutable reference to the object at the specified index in the list
+                    list_obj.get_list_index_mut(index_num)
+                } else {
+                    None
+                }
             }
             _ => None,
         }
     }
-    // Change this to Option
-    fn body_block(&mut self, body: &Vec<Tree>) -> Object {
+
+    fn execute_body(&mut self, body: &Vec<Tree>) -> Option<Object> {
         for stmt in body.clone() {
-            if let Object::Ret(expr) = self.interpret(stmt.clone()) {
+            if let Object::Ret(expr) = self.interpret(stmt) {
+                return Some(Object::Ret(expr));
+            }
+        }
+        None
+    }
+
+    #[inline(always)]
+    fn evaluate_block_with_scope(&mut self, body: &Vec<Tree>) -> Object {
+        self.enter_scope();
+        let result = self.body_block(body);
+        self.exit_scope();
+        result
+    }
+
+    fn body_block(&mut self, body: &Vec<Tree>) -> Object {
+        let mut result = Object::Null;
+
+        for stmt in body.clone() {
+            result = self.interpret(stmt);
+
+            if let Object::Ret(expr) = result {
                 self.exit_scope();
                 return Object::Ret(expr);
             }
         }
+
         self.exit_scope();
-        Object::Null
+        result
     }
 }
