@@ -53,6 +53,16 @@ impl Interpreter {
                 (Number(l), Number(r)) => Number(l + r),
                 (Number(l), String(r)) | (String(r), Number(l)) => String(format!("{l}{r}")),
                 (String(l), String(r)) => String(l + &r),
+
+                (List(mut l), List(ref mut r)) => {
+                    l.append(r);
+                    List(l)
+                }
+
+                (List(mut l), r) => {
+                    l.push(r.clone());
+                    List(l)
+                }
                 _ => Null,
             },
             Minus => match (left, right) {

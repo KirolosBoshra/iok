@@ -27,7 +27,6 @@ fn interpret_mode(interpreter: &mut Interpreter) {
         let mut lexer = Lexer::new(&input);
         let mut parser = Parser::new(lexer.tokenize());
 
-        // println!("{:?}", parser.parse_tokens());
         println!(
             "-> {}",
             interpreter.interpret(parser.parse_tokens().last().unwrap().clone())
@@ -64,8 +63,6 @@ fn main() {
     let parsed_tree = parser.parse_tokens();
 
     let mut interpreter = Interpreter::new();
-    // println!("{:?}\n\n", tokens);
-    // println!("{:?}", parsed_tree);
 
     parsed_tree.iter().for_each(|stmt| {
         interpreter.interpret(stmt.clone());
