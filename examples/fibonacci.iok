@@ -1,0 +1,13 @@
+let n = 10
+let a = 0
+let b = 1
+let next = b
+let count = 1
+
+while count <= n {
+  dbg(next)
+  count += 1
+  a = b
+  b = next
+  next = a + b
+}
