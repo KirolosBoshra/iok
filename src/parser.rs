@@ -6,7 +6,7 @@ use std::iter::Peekable;
 pub enum Tree {
     Number(f64),
     Bool(bool),
-    String(String),
+    String(Box<String>),
     List(Vec<Tree>),
     Ident(String),
     ListCall(Box<Tree>, Box<Tree>),
@@ -91,12 +91,7 @@ impl Parser {
                 }
                 TokenType::EquEqu | TokenType::NotEqu => {
                     iter.next();
-                    let right = self.parse_expression(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
-                }
-                TokenType::Greater | TokenType::GreatEqu | TokenType::Less | TokenType::LessEqu => {
-                    iter.next();
-                    let right = self.parse_expression(iter);
+                    let right = self.parse_term(iter);
                     left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
                 TokenType::DDot => {
@@ -171,9 +166,14 @@ impl Parser {
                         )),
                     );
                 }
-                TokenType::And | TokenType::Or => {
+                TokenType::Greater | TokenType::GreatEqu | TokenType::Less | TokenType::LessEqu => {
                     iter.next();
                     let right = self.parse_factor(iter);
+                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                TokenType::And | TokenType::Or => {
+                    iter.next();
+                    let right = self.parse_expression(iter);
                     left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
                 TokenType::OpenSquare => {
@@ -360,12 +360,14 @@ impl Parser {
                 }
                 TokenType::String(string) => Tree::String(
                     // i could use a crate for that  ig if i wanna use unicodes
-                    string
-                        .to_string()
-                        .replace("\\n", "\n")
-                        .replace("\\t", "\t")
-                        .replace("\\r", "\r")
-                        .replace("\\\"", "\""),
+                    Box::new(
+                        string
+                            .to_string()
+                            .replace("\\n", "\n")
+                            .replace("\\t", "\t")
+                            .replace("\\r", "\r")
+                            .replace("\\\"", "\""),
+                    ),
                 ),
                 TokenType::OpenSquare => {
                     let items = self.parse_items(iter);

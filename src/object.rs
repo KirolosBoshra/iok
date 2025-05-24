@@ -3,7 +3,7 @@ use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
 use std::{fmt, ops::BitOr};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
-    String(String),
+    String(Box<String>),
     Number(f64),
     Bool(bool),
     List(Vec<Object>),
@@ -21,18 +21,18 @@ pub enum Object {
 impl Object {
     pub fn to_string_obj(&self) -> Object {
         match self {
-            Object::String(_) => self.clone(),
-            Object::Number(num) => Object::String(num.to_string()),
-            Object::Bool(b) => Object::String(b.to_string()),
-            Object::Null => Object::String(String::new()),
-            _ => Object::String(String::new()),
+            Object::String(ref s) => Object::String(Box::new(s.to_string())),
+            Object::Number(num) => Object::String(Box::new(num.to_string())),
+            Object::Bool(b) => Object::String(Box::new(b.to_string())),
+            Object::Null => Object::String(Box::new(String::new())),
+            _ => Object::String(Box::new(String::new())),
         }
     }
 
     pub fn to_number_obj(&self) -> Object {
         match self {
             Object::String(s) => s.parse().map_or(Object::Invalid, Object::Number),
-            Object::Number(_) => self.clone(),
+            Object::Number(n) => Object::Number(*n),
             Object::Bool(b) => Object::Number(if *b { 1.0 } else { 0.0 }),
             Object::Null => Object::Number(0.0),
             _ => Object::Number(0.0),
@@ -43,7 +43,7 @@ impl Object {
         match self {
             Object::String(s) => Object::Bool(!s.is_empty()),
             Object::Number(num) => Object::Bool(*num != 0.0),
-            Object::Bool(_) => self.clone(),
+            Object::Bool(b) => Object::Bool(*b),
             Object::Null => Object::Bool(false),
             _ => Object::Bool(false),
         }
@@ -56,29 +56,29 @@ impl Object {
     //         _ => {}
     //     }
     // }
-    pub fn set_to(&mut self, value: Self) {
-        *self = value;
-    }
+    // pub fn set_to(&mut self, value: Self) {
+    //     *self = value;
+    // }
 
     pub fn get_string_value(&self) -> String {
         if let Object::String(s) = self.to_string_obj() {
-            s
+            *s
         } else {
             String::new()
         }
     }
 
     pub fn get_number_value(&self) -> f64 {
-        if let Object::Number(n) = self.to_number_obj() {
-            n
+        if let Object::Number(n) = self {
+            *n
         } else {
             0.0
         }
     }
 
     pub fn get_bool_value(&self) -> bool {
-        if let Object::Bool(b) = self.to_bool_obj() {
-            b
+        if let Object::Bool(b) = self {
+            *b
         } else {
             false
         }
@@ -90,7 +90,7 @@ impl Object {
             Object::String(s) => s
                 .chars()
                 .nth(i)
-                .map_or(Object::Null, |c| Object::String(c.to_string())),
+                .map_or(Object::Null, |c| Object::String(Box::new(c.to_string()))),
             _ => Object::Null,
         }
     }
@@ -106,17 +106,17 @@ impl Object {
     pub fn set_list_index(&mut self, i: usize, value: Object) {
         match self {
             Object::List(list) => {
-                if let Some(elem) = list.get_mut(i) {
-                    elem.set_to(value);
-                }
+                list[i] = value;
             }
             Object::String(s) => {
                 if i >= s.len() {
-                    let padding = std::iter::repeat(' ').take(10).collect::<String>();
-                    s.push_str(&padding);
+                    let needed = i + 1 - s.len();
+                    s.reserve(needed);
+                    s.push_str(&" ".repeat(needed)); // extend exactly to index i
                 }
-                if let Object::String(ref v) = value.to_string_obj() {
-                    s.replace_range(i..i + 1, v);
+                // Replace one character at position i:
+                if let Object::String(v) = value {
+                    s.replace_range(i..i + 1, &v);
                 }
             }
             _ => {}
@@ -186,7 +186,7 @@ impl BitAnd for Object {
     type Output = Object;
     fn bitand(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Object::Number(l), Object::Number(r)) => Object::Number((l as i32 & r as i32) as f64),
+            (Object::Number(l), Object::Number(r)) => Object::Number((l as i64 & r as i64) as f64),
             _ => Object::Invalid,
         }
     }
@@ -196,7 +196,7 @@ impl BitOr for Object {
     type Output = Object;
     fn bitor(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Object::Number(l), Object::Number(r)) => Object::Number((l as i32 | r as i32) as f64),
+            (Object::Number(l), Object::Number(r)) => Object::Number((l as i64 | r as i64) as f64),
             _ => Object::Invalid,
         }
     }
@@ -222,5 +222,11 @@ impl Shr for Object {
             }
             _ => Object::Invalid,
         }
+    }
+}
+
+impl Default for Object {
+    fn default() -> Self {
+        Object::Null
     }
 }
