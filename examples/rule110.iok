@@ -1,25 +1,26 @@
 // Reference https://gist.github.com/rexim/c595009436f87ca076e7c4a2fb92ce10
 
 let BOARD_CAP = 30
+let signs = [" ", "#"]
 
 let board = [0] * BOARD_CAP
 board[BOARD_CAP - 2] = 1
 
-let output = ""
+let output = " " * (BOARD_CAP + 1) * (BOARD_CAP - 2)
 
 for i -> 0..(BOARD_CAP - 2) {
-  let current_row = ""
-  for j -> 0..(BOARD_CAP) {
-    current_row += " #"[board[j]]
-  }
+    let row_start = i * (BOARD_CAP + 1)
+    output[row_start] = "\n"
 
-  output += "\n" + current_row
+    for j -> 0..BOARD_CAP {
+        output[row_start + 1 + j] = signs[board[j]]
+    }
 
-  let pattern = (board[0] << 1) | board[1]
-  for k -> 1..(BOARD_CAP - 1) {
-    pattern = ((pattern << 1) & 7) | board[k + 1]
-    board[k] = (110 >> pattern) & 1
-  }
+    let pattern = (board[0] << 1) | board[1]
+    for k -> 1..(BOARD_CAP - 1) {
+        pattern = ((pattern << 1) & 7) | board[k + 1]
+        board[k] = (110 >> pattern) & 1
+    }
 }
 
 dbg(output)
