@@ -1,6 +1,28 @@
 use std::{iter::Peekable, str::Chars};
 
 use crate::logger::{ErrorType, Logger};
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+
+lazy_static! {
+    static ref KEYWORDS: HashMap<&'static str, TokenType> = {
+        let mut map = HashMap::new();
+        map.insert("exit", TokenType::Exit);
+        map.insert("let", TokenType::Let);
+        map.insert("if", TokenType::If);
+        map.insert("els", TokenType::Els);
+        map.insert("elsif", TokenType::ElsIf);
+        map.insert("while", TokenType::While);
+        map.insert("for", TokenType::For);
+        map.insert("fn", TokenType::Fn);
+        map.insert("ret", TokenType::Ret);
+        map.insert("true", TokenType::Bool(true));
+        map.insert("false", TokenType::Bool(false));
+        map.insert("null", TokenType::Null);
+        map.insert("dbg", TokenType::Dbg);
+        map
+    };
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -95,63 +117,16 @@ impl<'a> Lexer<'a> {
                             break;
                         }
                     }
-                    match buf.as_str() {
-                        "exit" => tokens.push(Token {
-                            token: TokenType::Exit,
+                    if let Some(token_type) = KEYWORDS.get(buf.as_str()) {
+                        tokens.push(Token {
+                            token: token_type.clone(), // Ensure TokenType implements Clone
                             loc: self.curr_loc,
-                        }),
-                        "let" => tokens.push(Token {
-                            token: TokenType::Let,
-                            loc: self.curr_loc,
-                        }),
-                        "if" => tokens.push(Token {
-                            token: TokenType::If,
-                            loc: self.curr_loc,
-                        }),
-                        "els" => tokens.push(Token {
-                            token: TokenType::Els,
-                            loc: self.curr_loc,
-                        }),
-                        "elsif" => tokens.push(Token {
-                            token: TokenType::ElsIf,
-                            loc: self.curr_loc,
-                        }),
-                        "while" => tokens.push(Token {
-                            token: TokenType::While,
-                            loc: self.curr_loc,
-                        }),
-                        "for" => tokens.push(Token {
-                            token: TokenType::For,
-                            loc: self.curr_loc,
-                        }),
-                        "fn" => tokens.push(Token {
-                            token: TokenType::Fn,
-                            loc: self.curr_loc,
-                        }),
-                        "ret" => tokens.push(Token {
-                            token: TokenType::Ret,
-                            loc: self.curr_loc,
-                        }),
-                        "true" => tokens.push(Token {
-                            token: TokenType::Bool(true),
-                            loc: self.curr_loc,
-                        }),
-                        "false" => tokens.push(Token {
-                            token: TokenType::Bool(false),
-                            loc: self.curr_loc,
-                        }),
-                        "null" => tokens.push(Token {
-                            token: TokenType::Null,
-                            loc: self.curr_loc,
-                        }),
-                        "dbg" => tokens.push(Token {
-                            token: TokenType::Dbg,
-                            loc: self.curr_loc,
-                        }),
-                        _ => tokens.push(Token {
+                        });
+                    } else {
+                        tokens.push(Token {
                             token: TokenType::Ident(buf),
                             loc: self.curr_loc,
-                        }),
+                        });
                     }
                 }
                 '0'..='9' => {
