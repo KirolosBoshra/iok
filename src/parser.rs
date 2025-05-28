@@ -26,7 +26,7 @@ pub enum Tree {
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Range(Box<Tree>, Box<Tree>),
     Exit(Box<Tree>),
-    Dbg(Box<Tree>),
+    Write(Box<Tree>),
     Let(String, Box<Tree>),
     Assign(Box<Tree>, Box<Tree>),
     If {
@@ -606,10 +606,9 @@ impl Parser {
                     let expr = self.parse_factor(iter);
                     Tree::Exit(Box::new(expr))
                 }
-                // TODO TMP function
-                TokenType::Dbg => {
+                TokenType::Write => {
                     let expr = self.parse_factor(iter);
-                    Tree::Dbg(Box::new(expr))
+                    Tree::Write(Box::new(expr))
                 }
                 TokenType::Els | TokenType::ElsIf => {
                     Logger::error("Expected If statement first", it.loc, ErrorType::Parsing);

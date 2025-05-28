@@ -20,7 +20,7 @@ lazy_static! {
         map.insert("true", TokenType::Bool(true));
         map.insert("false", TokenType::Bool(false));
         map.insert("null", TokenType::Null);
-        map.insert("dbg", TokenType::Dbg);
+        map.insert("write", TokenType::Write);
         map
     };
 }
@@ -77,7 +77,7 @@ pub enum TokenType {
     Fn,
     Ret,
     Struct,
-    Dbg,
+    Write,
 }
 
 #[derive(Debug, Clone, Copy)]

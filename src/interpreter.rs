@@ -458,7 +458,7 @@ impl Interpreter {
                 std::process::exit(exit_code);
             }
 
-            Tree::Dbg(expr) => {
+            Tree::Write(expr) => {
                 let expr_obj = self.interpret(expr);
                 println!("{expr_obj}");
                 Object::Null
