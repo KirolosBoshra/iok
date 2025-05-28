@@ -4,7 +4,7 @@ struct Person {
   let id = 0  
 
   fn print() => {
-    dbg(
+    write(
       "Name: " + self.name + "\n" +
       "Age: " + self.age + "\n" + 
       "ID: " + self.id + "\n"
