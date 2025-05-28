@@ -8,7 +8,7 @@ Task  | Implemented
 ------------- | -------------
 Lists | ✅
 Functions | ✅
-Struct / Class |  ❌
+Struct |  ✅
 Optimize | ❌
 
 ## Syntax :

@@ -1,5 +1,6 @@
 use crate::parser::Tree;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
+use rustc_hash::FxHashMap;
 use std::{fmt, ops::BitOr};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
@@ -13,6 +14,15 @@ pub enum Object {
         name: String,
         args: Vec<(String, Object)>,
         body: Vec<Tree>,
+    },
+    StructDef {
+        name: Box<String>,
+        fields: Box<FxHashMap<String, Object>>,
+        methods: Box<FxHashMap<String, Object>>,
+    },
+    Instance {
+        struct_def: Box<Object>,
+        fields: FxHashMap<String, Object>,
     },
     Null,
     Invalid,
@@ -48,17 +58,6 @@ impl Object {
             _ => Object::Bool(false),
         }
     }
-    // pub fn convert_to(&mut self, other: Self) {
-    //     match other {
-    //         Object::String(_) => *self = self.to_string_obj(),
-    //         Object::Number(_) => *self = self.to_number_obj(),
-    //         Object::Bool(_) => *self = self.to_bool_obj(),
-    //         _ => {}
-    //     }
-    // }
-    // pub fn set_to(&mut self, value: Self) {
-    //     *self = value;
-    // }
 
     pub fn get_string_value(&self) -> String {
         if let Object::String(s) = self.to_string_obj() {
@@ -103,6 +102,16 @@ impl Object {
         }
     }
 
+    pub fn get_field_mut(&mut self, name: &String) -> Option<&mut Object> {
+        match self {
+            Object::Instance {
+                struct_def: _,
+                ref mut fields,
+            } => fields.get_mut(name),
+            _ => None,
+        }
+    }
+
     pub fn set_list_index(&mut self, i: usize, value: Object) {
         match self {
             Object::List(list) => {
@@ -127,9 +136,9 @@ impl Object {
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Object::String(s) => write!(f, "\"{}\"", s),
-            Object::Number(n) => write!(f, "{}", n),
-            Object::Bool(b) => write!(f, "{}", b),
+            Object::String(s) => write!(f, "{s}"),
+            Object::Number(n) => write!(f, "{n}"),
+            Object::Bool(b) => write!(f, "{b}"),
             Object::List(list) => {
                 let list_str: Vec<String> = list.iter().map(|obj| obj.to_string()).collect();
                 write!(f, "[{}]", list_str.join(", "))
@@ -141,6 +150,15 @@ impl fmt::Display for Object {
                 args,
                 body: _,
             } => write!(f, "fn {name} ({:?})", args),
+            Object::StructDef {
+                name,
+                fields: _,
+                methods: _,
+            } => write!(f, "<{name}>"),
+            Object::Instance {
+                struct_def: def,
+                fields: _,
+            } => write!(f, "Object{def}"),
             Object::Null => write!(f, "null"),
             Object::Invalid => write!(f, "invalid"),
         }

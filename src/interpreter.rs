@@ -45,16 +45,13 @@ impl Interpreter {
         match op {
             Plus => match (left, right) {
                 (Number(l), Number(r)) => Number(l + r),
-                (Number(l), String(r)) => {
-                    let mut s = l.to_string();
-                    s.push_str(&r);
-                    Object::String(Box::new(s))
-                }
+                (Number(l), String(r)) => String(Box::new(format!("{l}{r}"))),
 
                 (String(mut l), String(r)) => {
                     l.push_str(&r);
                     Object::String(l) // l is already String, no new allocation
                 }
+                (String(l), r) => String(Box::new(format!("{l}{r}"))),
 
                 (List(mut l), List(ref mut r)) => {
                     l.append(r);
@@ -241,6 +238,11 @@ impl Interpreter {
                             var_obj.set_list_index(index_num, value_obj);
                         }
                     }
+                    Tree::MemberAccess { .. } => {
+                        let field = self.interpret_mut(var).unwrap();
+                        *field = value_obj;
+                    }
+
                     _ => {}
                 }
 
@@ -282,33 +284,8 @@ impl Interpreter {
                 args: call_args,
             } => {
                 // Attempt to retrieve the function object
-                let obj = self.interpret(&Tree::Ident(name.to_string()));
-                if let Object::Fn { args, body, .. } = obj {
-                    // Enter a new scope for the function call
-                    self.enter_scope();
-
-                    // Bind default arguments and interpret call arguments
-                    for (i, (arg_name, default_value)) in args.iter().enumerate() {
-                        let value = if i < call_args.len() {
-                            self.interpret(&call_args[i])
-                        } else {
-                            default_value.clone()
-                        };
-                        self.set_var(&arg_name, value);
-                    }
-
-                    // Execute the function body
-                    self.enter_scope();
-                    let result = self.eval_block(&body);
-                    self.exit_scope();
-                    // Return result or Object::Null
-                    return match result {
-                        Object::Ret(expr) => *expr,
-                        _ => Object::Null,
-                    };
-                }
-
-                Object::Invalid
+                let obj = self.get_var(name).unwrap().clone();
+                self.call_function(&obj, call_args, None)
             }
 
             Tree::If {
@@ -382,6 +359,96 @@ impl Interpreter {
                 Object::Null
             }
 
+            Tree::StructDef {
+                name: struct_name,
+                fields,
+                methods,
+            } => {
+                let mut struct_fields = FxHashMap::default();
+                let mut struct_methods = FxHashMap::default();
+
+                fields.iter().for_each(|field| {
+                    if let Tree::Let(name, value) = field {
+                        struct_fields.insert(name.to_string(), self.interpret(value));
+                    }
+                });
+
+                methods.iter().for_each(|method| {
+                    if let Tree::Fn {
+                        name,
+                        args: _,
+                        body: _,
+                    } = method
+                    {
+                        struct_methods.insert(name.to_string(), self.interpret(method));
+                    }
+                });
+
+                let def = Object::StructDef {
+                    name: struct_name.clone(),
+                    fields: Box::new(struct_fields),
+                    methods: Box::new(struct_methods),
+                };
+                self.set_var(struct_name, def.clone());
+                def
+            }
+
+            Tree::StructInit { name, fields } => {
+                let mut def = self.get_var(name).unwrap().clone();
+                if let Object::StructDef {
+                    name: _,
+                    fields: ref mut def_fields,
+                    methods: _,
+                } = def
+                {
+                    fields.iter().for_each(|(field, value)| {
+                        def_fields.insert(field.to_string(), self.interpret(value));
+                    });
+                    let f = *def_fields.clone();
+                    return Object::Instance {
+                        struct_def: Box::new(def),
+                        fields: f,
+                    };
+                } else {
+                    Object::Null
+                }
+            }
+
+            Tree::MemberAccess { target, member } => {
+                let target_object = self.interpret(target);
+
+                if let Object::Instance {
+                    ref struct_def,
+                    ref fields,
+                } = target_object
+                {
+                    if let Object::StructDef {
+                        name: _,
+                        fields: _,
+                        ref methods,
+                    } = **struct_def
+                    {
+                        match &**member {
+                            Tree::Ident(name) => {
+                                return fields.get(name).unwrap_or(&Object::Null).clone();
+                            }
+                            Tree::FnCall { name, args } => {
+                                return self.call_function(
+                                    methods.get(name).unwrap(),
+                                    args,
+                                    Some(&target_object),
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                Object::Null
+            }
+
+            // TODO Move Static Access to separate fn
+            // Tree::StaticAccess { target, member } => {}
             Tree::Exit(code) => {
                 let exit_code = match self.interpret(code) {
                     Object::Number(num) => num as i32,
@@ -414,6 +481,15 @@ impl Interpreter {
                     None
                 }
             }
+            Tree::MemberAccess { target, member } => {
+                let target_obj = self.interpret_mut(target).unwrap();
+
+                if let Tree::Ident(field_name) = &**member {
+                    return target_obj.get_field_mut(field_name);
+                }
+                None
+            }
+
             _ => None,
         }
     }
@@ -427,5 +503,37 @@ impl Interpreter {
             }
         }
         result
+    }
+    pub fn call_function(
+        &mut self,
+        function: &Object,
+        call_args: &Vec<Tree>,
+        slf: Option<&Object>,
+    ) -> Object {
+        if let Object::Fn { args, body, .. } = function {
+            self.enter_scope();
+            // Bind default arguments and interpret call arguments
+            for (i, (arg_name, default_value)) in args.iter().enumerate() {
+                let value = if i < call_args.len() {
+                    self.interpret(&call_args[i])
+                } else {
+                    default_value.clone()
+                };
+                self.set_var(&arg_name, value);
+            }
+            if let Some(obj) = slf {
+                self.set_var("self", obj.clone());
+            }
+
+            // Execute the function body
+            let result = self.eval_block(&body);
+            self.exit_scope();
+            // Return result or Object::Null
+            return match result {
+                Object::Ret(expr) => *expr,
+                _ => Object::Null,
+            };
+        }
+        Object::Null
     }
 }

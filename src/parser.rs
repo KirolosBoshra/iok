@@ -1,5 +1,6 @@
 use crate::lexer::{Loc, Token, TokenType};
 use crate::logger::{ErrorType, Logger};
+use rustc_hash::FxHashMap;
 use std::iter::Peekable;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9,12 +10,17 @@ pub enum Tree {
     String(Box<String>),
     List(Vec<Tree>),
     Ident(String),
-    ListCall(Box<Tree>, Box<Tree>),
     Empty(),
+    ListCall(Box<Tree>, Box<Tree>),
     FnCall {
         name: String,
         args: Vec<Tree>,
     },
+    MemberAccess {
+        target: Box<Tree>, // variable
+        member: Box<Tree>, // field or method()
+    },
+
     Ret(Box<Tree>),
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
@@ -46,6 +52,15 @@ pub enum Tree {
         name: String,
         args: Vec<Tree>,
         body: Vec<Tree>,
+    },
+    StructDef {
+        name: Box<String>,
+        fields: Vec<Tree>,
+        methods: Vec<Tree>,
+    },
+    StructInit {
+        name: Box<String>,
+        fields: FxHashMap<String, Tree>,
     },
 }
 
@@ -131,6 +146,7 @@ impl Parser {
                     let right = self.parse_expression(iter);
                     left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
+
                 _ => break,
             }
             self.prev_token = op.clone();
@@ -191,6 +207,15 @@ impl Parser {
                         }
                     }
                 }
+                TokenType::Dot | TokenType::DColon => {
+                    iter.next();
+                    let member = Box::new(self.parse_factor(iter));
+                    left = Tree::MemberAccess {
+                        target: Box::new(left),
+                        member,
+                    };
+                }
+
                 _ => break,
             }
             self.prev_token = op.clone();
@@ -336,6 +361,56 @@ impl Parser {
         args
     }
 
+    fn parse_struct_body(
+        &mut self,
+        iter: &mut Peekable<std::slice::Iter<Token>>,
+    ) -> (Vec<Tree>, Vec<Tree>) {
+        let mut fields = vec![];
+        let mut methods = vec![];
+
+        while iter.peek().unwrap().token != TokenType::CloseCurly {
+            match iter.peek().unwrap().token {
+                TokenType::Let => {
+                    fields.push(self.parse_factor(iter));
+                }
+                TokenType::Fn => {
+                    methods.push(self.parse_factor(iter));
+                }
+
+                _ => Logger::error(
+                    "Unexpected Token",
+                    iter.peek().unwrap().loc,
+                    ErrorType::Parsing,
+                ),
+            };
+        }
+        iter.next();
+
+        (fields, methods)
+    }
+
+    fn parse_struct_fields(
+        &mut self,
+        iter: &mut Peekable<std::slice::Iter<Token>>,
+    ) -> FxHashMap<String, Tree> {
+        let mut map = FxHashMap::default();
+        while iter.peek().unwrap().token != TokenType::CloseCurly {
+            if let Some(TokenType::Ident(field_name)) =
+                self.expect_token(iter, TokenType::Ident(String::new()))
+            {
+                if self.expect_token(iter, TokenType::Colon).is_some() {
+                    map.insert(field_name, self.parse_factor(iter));
+                }
+                if iter.peek().unwrap().token == TokenType::Comma {
+                    iter.next();
+                    continue;
+                }
+            }
+        }
+        iter.next();
+        map
+    }
+
     fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
         if let Some(it) = iter.next() {
             match &it.token {
@@ -348,12 +423,23 @@ impl Parser {
                 }
                 TokenType::Ident(string) => {
                     if let Some(p) = iter.peek() {
-                        if p.token == TokenType::OpenParen {
-                            let args = self.parse_args(iter);
-                            return Tree::FnCall {
-                                name: string.to_string(),
-                                args,
-                            };
+                        match p.token {
+                            TokenType::OpenParen => {
+                                let args = self.parse_args(iter);
+                                return Tree::FnCall {
+                                    name: string.to_string(),
+                                    args,
+                                };
+                            }
+                            TokenType::OpenCurly => {
+                                iter.next();
+                                let fields = self.parse_struct_fields(iter);
+                                return Tree::StructInit {
+                                    name: Box::new(string.to_string()),
+                                    fields,
+                                };
+                            }
+                            _ => {}
                         }
                     }
                     Tree::Ident(string.to_string())
@@ -408,38 +494,17 @@ impl Parser {
                         }
                     }
                 },
-                TokenType::Let => match &iter
-                    .next()
-                    .unwrap_or(&Token {
-                        token: TokenType::Null,
-                        loc: it.loc,
-                    })
-                    .token
-                {
+                TokenType::Let => match &iter.next().unwrap().token {
                     TokenType::Ident(var) => {
-                        if let Some(next) = iter.next() {
-                            match next.token {
-                                TokenType::Equal => {
-                                    self.prev_token = next.clone();
-                                    let expr = self.parse_expression(iter);
-                                    return Tree::Let(var.to_string(), Box::new(expr));
-                                }
-                                _ => {
-                                    Logger::error(
-                                        "Expected '=' after identifier in let statement",
-                                        it.loc,
-                                        ErrorType::Parsing,
-                                    );
-                                    return Tree::Empty();
-                                }
+                        let next = *iter.peek().unwrap();
+                        match next.token {
+                            TokenType::Equal => {
+                                self.prev_token = next.clone();
+                                iter.next();
+                                let expr = self.parse_expression(iter);
+                                Tree::Let(var.to_string(), Box::new(expr))
                             }
-                        } else {
-                            Logger::error(
-                                "Expected '=' after identifier in let statement",
-                                it.loc,
-                                ErrorType::Parsing,
-                            );
-                            return Tree::Empty();
+                            _ => Tree::Let(var.to_string(), Box::new(Tree::Empty())),
                         }
                     }
                     _ => {
@@ -518,6 +583,25 @@ impl Parser {
                     };
                     Tree::Empty()
                 }
+
+                TokenType::Struct => {
+                    if let Some(TokenType::Ident(name)) =
+                        self.expect_token(iter, TokenType::Ident(String::new()))
+                    {
+                        if self.expect_token(iter, TokenType::OpenCurly).is_some() {
+                            let (fields, methods) = self.parse_struct_body(iter);
+                            return Tree::StructDef {
+                                name: Box::new(name),
+                                fields,
+                                methods,
+                            };
+                        }
+                    } else {
+                        Logger::error("Expected Struct Name", it.loc, ErrorType::Parsing);
+                    }
+                    Tree::Empty()
+                }
+
                 TokenType::Exit => {
                     let expr = self.parse_factor(iter);
                     Tree::Exit(Box::new(expr))

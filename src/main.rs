@@ -27,7 +27,9 @@ fn interpret_mode(interpreter: &mut Interpreter) {
         let mut lexer = Lexer::new(&input);
         let mut parser = Parser::new(lexer.tokenize());
         let ast = parser.parse_tokens();
-        println!("-> {}", interpreter.interpret(ast.last().unwrap()));
+        println!("{:?}", ast.last().unwrap());
+        let obj = interpreter.interpret(ast.last().unwrap());
+        println!("-> {}", obj);
     }
 }
 

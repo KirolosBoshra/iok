@@ -1,0 +1,21 @@
+struct Person {
+  let name
+  let age
+  let id = 0  
+
+  fn print() => {
+    dbg(
+      "Name: " + self.name + "\n" +
+      "Age: " + self.age + "\n" + 
+      "ID: " + self.id + "\n"
+      )
+  }
+}
+
+let person1 = Person { 
+                  name: "John Doe",
+                  age: 21,
+                  id: 0
+              }
+
+person1.print()

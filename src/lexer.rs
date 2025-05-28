@@ -15,6 +15,7 @@ lazy_static! {
         map.insert("while", TokenType::While);
         map.insert("for", TokenType::For);
         map.insert("fn", TokenType::Fn);
+        map.insert("struct", TokenType::Struct);
         map.insert("ret", TokenType::Ret);
         map.insert("true", TokenType::Bool(true));
         map.insert("false", TokenType::Bool(false));
@@ -59,6 +60,8 @@ pub enum TokenType {
     CloseCurly,
     Comma,
     Semi,
+    Colon,
+    DColon,
     Dot,
     DDot,
     ThinArrow,
@@ -73,6 +76,7 @@ pub enum TokenType {
     For,
     Fn,
     Ret,
+    Struct,
     Dbg,
 }
 
@@ -445,6 +449,24 @@ impl<'a> Lexer<'a> {
                     });
                     self.next();
                 }
+                ':' => {
+                    self.next();
+                    if let Some(c) = self.iter.peek() {
+                        if *c == ':' {
+                            tokens.push(Token {
+                                token: TokenType::DColon,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        } else {
+                            tokens.push(Token {
+                                token: TokenType::Colon,
+                                loc: self.curr_loc,
+                            })
+                        }
+                    }
+                }
+
                 '\n' => {
                     self.curr_loc.x = 1;
                     self.curr_loc.y += 1;
