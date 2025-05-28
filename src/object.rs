@@ -112,6 +112,21 @@ impl Object {
         }
     }
 
+    pub fn get_field(&self, name: &String) -> Option<&Object> {
+        match self {
+            Object::Instance {
+                struct_def: _,
+                ref fields,
+            } => fields.get(name),
+            Object::StructDef {
+                name: _,
+                fields,
+                methods: _,
+            } => fields.get(name),
+            _ => None,
+        }
+    }
+
     pub fn set_list_index(&mut self, i: usize, value: Object) {
         match self {
             Object::List(list) => {

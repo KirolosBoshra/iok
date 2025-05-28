@@ -225,8 +225,7 @@ impl Interpreter {
                                 if matches!(existing_value, Object::Fn { .. }) {
                                     return Object::Invalid;
                                 }
-                                *existing_value = value_obj;
-                                return Object::Null;
+                                *existing_value = value_obj.clone();
                             }
                         }
                     }
@@ -235,18 +234,18 @@ impl Interpreter {
                             self.interpret(&index).to_number_obj().get_number_value() as usize;
 
                         if let Some(var_obj) = self.interpret_mut(&var) {
-                            var_obj.set_list_index(index_num, value_obj);
+                            var_obj.set_list_index(index_num, value_obj.clone());
                         }
                     }
                     Tree::MemberAccess { .. } => {
                         let field = self.interpret_mut(var).unwrap();
-                        *field = value_obj;
+                        *field = value_obj.clone();
                     }
 
                     _ => {}
                 }
 
-                Object::Null
+                value_obj
             }
 
             Tree::Fn { name, args, body } => {
@@ -416,38 +415,46 @@ impl Interpreter {
 
             Tree::MemberAccess { target, member } => {
                 let target_object = self.interpret(target);
+                match &**member {
+                    Tree::Ident(name) => {
+                        return target_object
+                            .get_field(name)
+                            .unwrap_or(&Object::Null)
+                            .clone();
+                    }
 
-                if let Object::Instance {
-                    ref struct_def,
-                    ref fields,
-                } = target_object
-                {
-                    if let Object::StructDef {
-                        name: _,
-                        fields: _,
-                        ref methods,
-                    } = **struct_def
-                    {
-                        match &**member {
-                            Tree::Ident(name) => {
-                                return fields.get(name).unwrap_or(&Object::Null).clone();
+                    Tree::FnCall { name, args } => {
+                        let method = match target_object {
+                            Object::Instance { ref struct_def, .. } => {
+                                if let Object::StructDef { methods, .. } = &**struct_def {
+                                    return self.call_function(
+                                        methods.get(name).unwrap(),
+                                        args,
+                                        Some(&target_object),
+                                    );
+                                } else {
+                                    Object::Null
+                                }
                             }
-                            Tree::FnCall { name, args } => {
+                            Object::StructDef { ref methods, .. } => {
                                 return self.call_function(
                                     methods.get(name).unwrap(),
                                     args,
                                     Some(&target_object),
                                 );
                             }
-                            _ => {}
-                        }
+                            _ => Object::Null,
+                        };
+                        return method;
                     }
-                }
+
+                    _ => Object::Null,
+                };
 
                 Object::Null
             }
 
-            // TODO Move Static Access to separate fn
+            // TODO Move Static Access to separate fn for import other files or libs
             // Tree::StaticAccess { target, member } => {}
             Tree::Exit(code) => {
                 let exit_code = match self.interpret(code) {

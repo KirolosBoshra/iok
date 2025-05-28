@@ -399,7 +399,7 @@ impl Parser {
                 self.expect_token(iter, TokenType::Ident(String::new()))
             {
                 if self.expect_token(iter, TokenType::Colon).is_some() {
-                    map.insert(field_name, self.parse_factor(iter));
+                    map.insert(field_name, self.parse_expression(iter));
                 }
                 if iter.peek().unwrap().token == TokenType::Comma {
                     iter.next();

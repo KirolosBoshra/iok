@@ -1,21 +1,29 @@
+let id = 0
+
 struct Person {
   let name
   let age
-  let id = 0  
+  let id = id
+
+  fn new(n, a) => {
+    ret Person {
+      name: n,
+      age: a,
+      id: id++,
+    }
+  }
 
   fn print() => {
     write(
       "Name: " + self.name + "\n" +
       "Age: " + self.age + "\n" + 
       "ID: " + self.id + "\n"
-      )
+    )
   }
 }
 
-let person1 = Person { 
-                  name: "John Doe",
-                  age: 21,
-                  id: 0
-              }
+let person1 = Person::new("John Doe", 21)
+let person2 = Person::new("Jane Doe", 21)
 
 person1.print()
+person2.print()
