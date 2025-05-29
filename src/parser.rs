@@ -423,23 +423,42 @@ impl Parser {
                 }
                 TokenType::Ident(string) => {
                     if let Some(p) = iter.peek() {
-                        match p.token {
-                            TokenType::OpenParen => {
-                                let args = self.parse_args(iter);
-                                return Tree::FnCall {
-                                    name: string.to_string(),
-                                    args,
-                                };
-                            }
-                            TokenType::OpenCurly => {
-                                iter.next();
+                        if p.token == TokenType::OpenParen {
+                            let args = self.parse_args(iter);
+                            return Tree::FnCall {
+                                name: string.to_string(),
+                                args,
+                            };
+                        }
+                        if p.token == TokenType::OpenCurly {
+                            let mut clone = iter.clone();
+                            clone.next(); // skip the `{`
+                                          // now the next token in `clone` should be Ident(fieldName)
+                                          // and the one after that should be a Colon.
+                            let is_struct_syntax = clone
+                                .next()
+                                .map(|t| match &t.token {
+                                    TokenType::Ident(_) => true,
+                                    _ => false,
+                                })
+                                .unwrap_or(false)
+                                && clone
+                                    .next()
+                                    .map(|t| match &t.token {
+                                        TokenType::Colon => true,
+                                        _ => false,
+                                    })
+                                    .unwrap_or(false);
+
+                            if is_struct_syntax {
+                                // we really do have `Ident { field1: … }`
+                                iter.next(); // consume the `{`
                                 let fields = self.parse_struct_fields(iter);
                                 return Tree::StructInit {
                                     name: Box::new(string.to_string()),
                                     fields,
                                 };
                             }
-                            _ => {}
                         }
                     }
                     Tree::Ident(string.to_string())
