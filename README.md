@@ -9,6 +9,9 @@ Task  | Implemented
 Lists | ✅
 Functions | ✅
 Struct |  ✅
+Imports |  ✅
+STD Lib | ❌
+File IO | ❌
 Optimize | ❌
 
 ## Syntax :

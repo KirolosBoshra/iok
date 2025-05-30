@@ -21,6 +21,7 @@ lazy_static! {
         map.insert("false", TokenType::Bool(false));
         map.insert("null", TokenType::Null);
         map.insert("write", TokenType::Write);
+        map.insert("import", TokenType::Import);
         map
     };
 }
@@ -78,6 +79,8 @@ pub enum TokenType {
     Ret,
     Struct,
     Write,
+    Import,
+    As,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -123,7 +126,7 @@ impl<'a> Lexer<'a> {
                     }
                     if let Some(token_type) = KEYWORDS.get(buf.as_str()) {
                         tokens.push(Token {
-                            token: token_type.clone(), // Ensure TokenType implements Clone
+                            token: token_type.clone(),
                             loc: self.curr_loc,
                         });
                     } else {
@@ -465,6 +468,14 @@ impl<'a> Lexer<'a> {
                             })
                         }
                     }
+                }
+
+                '@' => {
+                    tokens.push(Token {
+                        token: TokenType::As,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
 
                 '\n' => {

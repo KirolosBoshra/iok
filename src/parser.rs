@@ -62,6 +62,10 @@ pub enum Tree {
         name: Box<String>,
         fields: FxHashMap<String, Tree>,
     },
+    Import {
+        path: Box<Tree>,
+        alias: Option<String>,
+    },
 }
 
 pub struct Parser {
@@ -619,6 +623,19 @@ impl Parser {
                         Logger::error("Expected Struct Name", it.loc, ErrorType::Parsing);
                     }
                     Tree::Empty()
+                }
+
+                TokenType::Import => {
+                    let path = Box::new(self.parse_expression(iter));
+                    let mut alias = None;
+                    if iter.peek().is_some() && iter.peek().unwrap().token == TokenType::As {
+                        iter.next();
+                        if let TokenType::Ident(ref name) = iter.peek().unwrap().token {
+                            iter.next();
+                            alias = Some(name.to_string());
+                        }
+                    }
+                    Tree::Import { path, alias }
                 }
 
                 TokenType::Exit => {

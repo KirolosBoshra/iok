@@ -1,0 +1,8 @@
+import "lib.iok" @ lib
+import std::io::print
+
+let x = lib::foo::add(2, 3)
+write(x + "\n")
+write("PI: " + lib::bar::pi + "\n")
+lib::foo::print_string("Hello\n")
+print("tt")

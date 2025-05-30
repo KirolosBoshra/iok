@@ -15,4 +15,4 @@ let x = add(2, 3)
 
 let y = inc(x)
 
-write(x)
+write(x + "\n")

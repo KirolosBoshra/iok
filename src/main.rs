@@ -7,7 +7,7 @@ mod parser;
 use interpreter::Interpreter;
 use lexer::Lexer;
 use parser::Parser;
-use std::{fs::File, io, io::Read, io::Write};
+use std::{env, fs::File, io, io::Read, io::Write, path::Path};
 fn interpret_mode(interpreter: &mut Interpreter) {
     let mut input = String::new();
     loop {
@@ -36,9 +36,12 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
-        // eprintln!("Usages:\n./iok <file_path>");
-        // std::process::exit(1);
-        interpret_mode(&mut Interpreter::new());
+        let path = env::current_dir()
+            .expect("Can't Access Dir")
+            .to_str()
+            .unwrap()
+            .to_string();
+        interpret_mode(&mut Interpreter::new(path));
     }
 
     let mut file_name = "main.iok";
@@ -60,7 +63,18 @@ fn main() {
 
     let parsed_tree = parser.parse_tokens();
 
-    let mut interpreter = Interpreter::new();
+    let dir_path = Path::new(file_name);
+    let path = if let Ok(abs_path) = dir_path.canonicalize() {
+        if let Some(parent) = abs_path.parent() {
+            parent.to_str().unwrap().to_string()
+        } else {
+            String::from("/")
+        }
+    } else {
+        String::from("/")
+    };
+
+    let mut interpreter = Interpreter::new(path);
 
     parsed_tree.iter().for_each(|stmt| {
         interpreter.interpret(stmt);

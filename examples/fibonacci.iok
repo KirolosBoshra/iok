@@ -5,7 +5,7 @@ let next = b
 let count = 1
 
 while count <= n {
-  write(next)
+  write(next + " ")
   count += 1
   a = b
   b = next

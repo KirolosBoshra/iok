@@ -1,0 +1,2 @@
+import "lib/foo.iok" @ foo
+import "lib/bar.iok" @ bar

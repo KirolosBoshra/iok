@@ -24,6 +24,10 @@ pub enum Object {
         struct_def: Box<Object>,
         fields: FxHashMap<String, Object>,
     },
+    NameSpace {
+        name: String,
+        namespace: Box<FxHashMap<String, Object>>,
+    },
     Null,
     Invalid,
 }
@@ -108,6 +112,7 @@ impl Object {
                 struct_def: _,
                 ref mut fields,
             } => fields.get_mut(name),
+            Object::NameSpace { namespace, .. } => namespace.get_mut(name),
             _ => None,
         }
     }
@@ -123,6 +128,7 @@ impl Object {
                 fields,
                 methods: _,
             } => fields.get(name),
+            Object::NameSpace { namespace, .. } => namespace.get(name),
             _ => None,
         }
     }
@@ -174,6 +180,7 @@ impl fmt::Display for Object {
                 struct_def: def,
                 fields: _,
             } => write!(f, "Object{def}"),
+            Object::NameSpace { name, .. } => write!(f, "@{name}"),
             Object::Null => write!(f, "null"),
             Object::Invalid => write!(f, "invalid"),
         }

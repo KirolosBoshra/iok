@@ -1,16 +1,33 @@
-use crate::{lexer::TokenType, object::Object, parser::Tree};
+use crate::{lexer::Lexer, lexer::TokenType, object::Object, parser::Parser, parser::Tree};
 use core::iter::Iterator;
 use rustc_hash::FxHashMap;
+use std::{env, fs::File, io::Read, path::Path};
+
+// default dir name for std libs
+const STD_DIR: &str = "std";
 
 #[derive(Debug)]
 pub struct Interpreter {
     scopes: Vec<FxHashMap<String, Object>>,
+    current_path: String,
+    std_path: String,
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
+    pub fn new(current_path: String) -> Self {
+        let std_path = env::current_exe()
+            .expect("Can't get exe path")
+            .parent()
+            .expect("No parent directory")
+            .join(STD_DIR)
+            .to_str()
+            .unwrap()
+            .to_string();
+
         Self {
             scopes: vec![FxHashMap::default()],
+            current_path,
+            std_path,
         }
     }
 
@@ -443,6 +460,19 @@ impl Interpreter {
                                     Some(&target_object),
                                 );
                             }
+                            Object::NameSpace {
+                                namespace,
+                                name: namespace_name,
+                            } => {
+                                return self.call_function(
+                                    namespace.get(name).expect(
+                                        format!("function doesn't exist in {namespace_name}")
+                                            .as_str(),
+                                    ),
+                                    args,
+                                    None,
+                                );
+                            }
                             _ => Object::Null,
                         };
                         return method;
@@ -454,8 +484,55 @@ impl Interpreter {
                 Object::Null
             }
 
-            // TODO Move Static Access to separate fn for import other files or libs
-            // Tree::StaticAccess { target, member } => {}
+            Tree::Import { path, alias } => {
+                if let Tree::MemberAccess { .. } = &**path {
+                    let flat_path = self.flatten_path(path);
+                    let root_path = format!("{}/{}.iok", self.std_path, flat_path[0]);
+                    let root_namespace = self.import_file_to_namespace(&root_path);
+
+                    let mut scope = root_namespace;
+
+                    let mut current_obj = Object::Null;
+                    for (i, seg) in flat_path.iter().enumerate().skip(1) {
+                        let val = scope
+                            .get(seg)
+                            .unwrap_or_else(|| {
+                                panic!("`{}` not found in `{}`", seg, flat_path[..i].join("::"))
+                            })
+                            .clone();
+                        if i < flat_path.len() - 1 {
+                            match val {
+                                Object::NameSpace { namespace, .. } => {
+                                    scope = *namespace; // enter that namespace
+                                }
+                                _ => panic!("`{}` is not a namespace", seg),
+                            }
+                        } else {
+                            current_obj = val;
+                        }
+                    }
+                    let bind_name = alias.as_deref().unwrap_or(&flat_path.last().unwrap());
+
+                    self.set_var(&bind_name, current_obj);
+                    return Object::Null;
+                }
+
+                let file_path = self.resolve_import_path(&**path);
+                let namespace = self.import_file_to_namespace(&file_path);
+
+                if let Some(name) = alias {
+                    let bind_name = name.as_str();
+                    let obj = Object::NameSpace {
+                        name: bind_name.to_string(),
+                        namespace: Box::new(namespace),
+                    };
+                    self.set_var(bind_name, obj);
+                } else {
+                    self.import_namespace_into_scope(namespace);
+                }
+                Object::Null
+            }
+
             Tree::Exit(code) => {
                 let exit_code = match self.interpret(code) {
                     Object::Number(num) => num as i32,
@@ -467,7 +544,7 @@ impl Interpreter {
 
             Tree::Write(expr) => {
                 let expr_obj = self.interpret(expr);
-                println!("{expr_obj}");
+                print!("{expr_obj}");
                 Object::Null
             }
 
@@ -542,5 +619,81 @@ impl Interpreter {
             };
         }
         Object::Null
+    }
+
+    fn resolve_import_path(&self, path: &Tree) -> String {
+        let mut path_str = match path {
+            Tree::String(p) => self.current_path.to_string() + "\\" + &**p,
+            Tree::Ident(lib) => self.std_path.to_string() + "/" + lib + ".iok",
+            _ => panic!("Expected Path or Lib name"),
+        };
+        if cfg!(windows) {
+            path_str = path_str.replace("/", "\\");
+        }
+
+        path_str
+    }
+
+    fn flatten_path(&self, path: &Tree) -> Vec<String> {
+        match path {
+            Tree::Ident(name) => vec![name.clone()],
+            Tree::MemberAccess { target, member } => {
+                let mut parts = self.flatten_path(target);
+                if let Tree::Ident(m) = &**member {
+                    parts.push(m.clone());
+                    parts
+                } else {
+                    panic!("Import path member must be identifier");
+                }
+            }
+            _ => panic!("Invalid import path: {:?}", path),
+        }
+    }
+    fn import_file_to_namespace(&self, file_path: &String) -> FxHashMap<String, Object> {
+        let parsed_trees = self.generate_ast(file_path);
+        let parent_path = Path::new(file_path)
+            .canonicalize()
+            .expect("Can't get path")
+            .parent()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        self.eval_namespace(parent_path, &parsed_trees)
+    }
+
+    fn import_namespace_into_scope(&mut self, namespace: FxHashMap<String, Object>) {
+        for (name, value) in namespace {
+            self.set_var(&name, value);
+        }
+    }
+    fn generate_ast(&self, file_path: &String) -> Vec<Tree> {
+        let mut input = String::new();
+
+        let mut file = File::open(&file_path).expect("Can't locate lib");
+        file.read_to_string(&mut input).expect("can't read file");
+        input = input.trim_end().to_string();
+
+        let mut lexer = Lexer::new(&input);
+        let tokens = lexer.tokenize();
+        let mut parser = Parser::new(tokens);
+
+        let parsed_tree = parser.parse_tokens();
+        parsed_tree
+    }
+    fn eval_namespace(&self, path: String, parsed_trees: &Vec<Tree>) -> FxHashMap<String, Object> {
+        let mut namespace = FxHashMap::default();
+        let mut mod_interpreter = Interpreter::new(path);
+        parsed_trees.iter().for_each(|ast| {
+            mod_interpreter.interpret(ast);
+        });
+
+        if let Some(scope) = mod_interpreter.scopes.first() {
+            for (n, value) in scope {
+                namespace.insert(n.clone(), value.clone());
+            }
+        }
+        namespace
     }
 }
