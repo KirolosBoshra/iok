@@ -108,11 +108,6 @@ impl Parser {
                     let right = self.parse_term(iter);
                     left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
-                TokenType::EquEqu | TokenType::NotEqu => {
-                    iter.next();
-                    let right = self.parse_term(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
-                }
                 TokenType::DDot => {
                     iter.next();
                     let right = self.parse_expression(iter);
@@ -174,6 +169,12 @@ impl Parser {
                     let expr = self.parse_expression(iter);
                     left = Tree::Assign(Box::new(left), Box::new(expr));
                 }
+                TokenType::EquEqu | TokenType::NotEqu => {
+                    iter.next();
+                    let right = self.parse_factor(iter);
+                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+
                 TokenType::PlusEqu => {
                     iter.next();
                     let right = self.parse_expression(iter);
