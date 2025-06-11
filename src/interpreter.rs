@@ -478,8 +478,23 @@ impl Interpreter {
                     Tree::FnCall { name, args } => {
                         let method = match target_object {
                             Object::String(_) | Object::List(_) => {
+                                // this BS but who cares
                                 match &**name {
                                     "len" => return Object::Number(target_object.get_len() as f64),
+                                    "push" => {
+                                        let value = self.interpret(&args[0]);
+                                        let target_mut = self.interpret_mut(target).unwrap();
+                                        if args.len() == 1 {
+                                            target_mut.push(value)
+                                        } else {
+                                            println!("Expected 1 arg found {}", args.len());
+                                            return Object::Null;
+                                        }
+                                    }
+                                    "pop" => {
+                                        let target_mut = self.interpret_mut(target).unwrap();
+                                        return target_mut.pop();
+                                    }
                                     _ => {}
                                 }
                                 Object::Null

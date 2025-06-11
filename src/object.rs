@@ -166,6 +166,26 @@ impl Object {
             _ => 0,
         }
     }
+
+    pub fn push(&mut self, obj: Object) {
+        match self {
+            Object::List(ref mut list) => {
+                list.push(obj);
+            }
+            Object::String(ref mut s) => s.push_str(&obj.to_string()),
+            _ => {}
+        }
+    }
+
+    pub fn pop(&mut self) -> Object {
+        match self {
+            Object::List(ref mut list) => list.pop().expect("List is empty"),
+            Object::String(ref mut s) => {
+                Object::String(Box::new(s.pop().expect("String is Empty").to_string()))
+            }
+            _ => Object::Invalid,
+        }
+    }
 }
 
 impl fmt::Display for Object {
