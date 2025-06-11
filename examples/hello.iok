@@ -1,0 +1,5 @@
+import std::io
+
+let name = "IOk"
+
+io::println("Hello, {name}!")
