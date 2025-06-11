@@ -1,7 +1,9 @@
 use crate::parser::Tree;
+use crate::std_native::NativeFn;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
 use rustc_hash::FxHashMap;
 use std::{fmt, ops::BitOr};
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
     String(Box<String>),
@@ -14,6 +16,10 @@ pub enum Object {
         name: String,
         args: Vec<(String, Object)>,
         body: Vec<Tree>,
+    },
+    NativeFn {
+        name: String,
+        function: NativeFn,
     },
     StructDef {
         name: Box<String>,
@@ -152,6 +158,14 @@ impl Object {
             _ => {}
         }
     }
+
+    pub fn get_len(&self) -> usize {
+        match self {
+            Object::String(str) => str.len(),
+            Object::List(list) => list.len(),
+            _ => 0,
+        }
+    }
 }
 
 impl fmt::Display for Object {
@@ -171,6 +185,7 @@ impl fmt::Display for Object {
                 args,
                 body: _,
             } => write!(f, "fn {name} ({:?})", args),
+            Object::NativeFn { name, .. } => write!(f, "NativeFn<{name}>"),
             Object::StructDef {
                 name,
                 fields: _,

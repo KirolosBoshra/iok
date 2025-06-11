@@ -25,8 +25,6 @@ pub enum Tree {
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Range(Box<Tree>, Box<Tree>),
-    Exit(Box<Tree>),
-    Write(Box<Tree>),
     Let(String, Box<Tree>),
     Assign(Box<Tree>, Box<Tree>),
     If {
@@ -189,7 +187,7 @@ impl Parser {
                 }
                 TokenType::Greater | TokenType::GreatEqu | TokenType::Less | TokenType::LessEqu => {
                     iter.next();
-                    let right = self.parse_factor(iter);
+                    let right = self.parse_term(iter);
                     left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
                 TokenType::And | TokenType::Or => {
@@ -639,14 +637,6 @@ impl Parser {
                     Tree::Import { path, alias }
                 }
 
-                TokenType::Exit => {
-                    let expr = self.parse_factor(iter);
-                    Tree::Exit(Box::new(expr))
-                }
-                TokenType::Write => {
-                    let expr = self.parse_factor(iter);
-                    Tree::Write(Box::new(expr))
-                }
                 TokenType::Els | TokenType::ElsIf => {
                     Logger::error("Expected If statement first", it.loc, ErrorType::Parsing);
                     Tree::Empty()

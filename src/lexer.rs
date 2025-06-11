@@ -7,7 +7,6 @@ use std::collections::HashMap;
 lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, TokenType> = {
         let mut map = HashMap::new();
-        map.insert("exit", TokenType::Exit);
         map.insert("let", TokenType::Let);
         map.insert("if", TokenType::If);
         map.insert("els", TokenType::Els);
@@ -20,7 +19,6 @@ lazy_static! {
         map.insert("true", TokenType::Bool(true));
         map.insert("false", TokenType::Bool(false));
         map.insert("null", TokenType::Null);
-        map.insert("write", TokenType::Write);
         map.insert("import", TokenType::Import);
         map
     };
@@ -68,7 +66,6 @@ pub enum TokenType {
     ThinArrow,
     FatArrow,
     Let,
-    Exit,
     Ident(String),
     If,
     Els,
@@ -78,7 +75,6 @@ pub enum TokenType {
     Fn,
     Ret,
     Struct,
-    Write,
     Import,
     As,
 }

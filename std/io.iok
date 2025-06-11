@@ -1,2 +1,30 @@
-// TODO
-fn print(str) => write(a)
+fn print(str) => {
+  let output = ""
+  
+  let i = 0
+  
+  while i < str.len() {
+    if str[i] == "{" {
+      i++
+      let var = ""
+      while str[i] != "}" { 
+        var += str[i]
+        if i >= str.len() {
+          write("Expected }")
+          exit(-1)
+        }
+        i++
+      }
+
+      let value = __get_var_from_str(var)
+      output += value
+    } els {
+      output += str[i]
+    }
+    i++
+  }
+
+  write(output)
+}
+
+fn println(str) => print(str+"\n")

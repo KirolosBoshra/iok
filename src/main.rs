@@ -3,6 +3,7 @@ mod lexer;
 mod logger;
 mod object;
 mod parser;
+mod std_native;
 
 use interpreter::Interpreter;
 use lexer::Lexer;

@@ -1,3 +1,4 @@
+use crate::std_native;
 use crate::{lexer::Lexer, lexer::TokenType, object::Object, parser::Parser, parser::Tree};
 use core::iter::Iterator;
 use rustc_hash::FxHashMap;
@@ -28,8 +29,32 @@ impl Interpreter {
                 .to_string()
         };
 
+        let mut base_scope = FxHashMap::default();
+        base_scope.insert(
+            "write".to_string(),
+            Object::NativeFn {
+                name: "write".to_string(),
+                function: std_native::native_write,
+            },
+        );
+        base_scope.insert(
+            "exit".to_string(),
+            Object::NativeFn {
+                name: "exit".to_string(),
+                function: std_native::native_exit,
+            },
+        );
+
+        base_scope.insert(
+            "__get_var_from_str".to_string(),
+            Object::NativeFn {
+                name: "__get_var_from_str".to_string(),
+                function: std_native::get_var_from_str,
+            },
+        );
+
         Self {
-            scopes: vec![FxHashMap::default()],
+            scopes: vec![base_scope],
             current_path,
             std_path,
         }
@@ -50,7 +75,7 @@ impl Interpreter {
         self.get_var(name).unwrap()
     }
 
-    fn get_var(&mut self, name: &str) -> Option<&mut Object> {
+    pub fn get_var(&mut self, name: &str) -> Option<&mut Object> {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(value) = scope.get_mut(name) {
                 return Some(value);
@@ -304,8 +329,14 @@ impl Interpreter {
                 args: call_args,
             } => {
                 // Attempt to retrieve the function object
-                let obj = self.get_var(name).unwrap().clone();
-                self.call_function(&obj, call_args, None)
+                let var = self.get_var(name);
+                if var.is_some() {
+                    let obj = var.unwrap().clone();
+                    self.call_function(&obj, call_args, None)
+                } else {
+                    println!("{name} is not a function");
+                    Object::Null
+                }
             }
 
             Tree::If {
@@ -446,6 +477,13 @@ impl Interpreter {
 
                     Tree::FnCall { name, args } => {
                         let method = match target_object {
+                            Object::String(_) | Object::List(_) => {
+                                match &**name {
+                                    "len" => return Object::Number(target_object.get_len() as f64),
+                                    _ => {}
+                                }
+                                Object::Null
+                            }
                             Object::Instance { ref struct_def, .. } => {
                                 if let Object::StructDef { methods, .. } = &**struct_def {
                                     return self.call_function(
@@ -465,16 +503,18 @@ impl Interpreter {
                                 );
                             }
                             Object::NameSpace {
-                                namespace,
-                                name: namespace_name,
+                                ref namespace,
+                                name: ref namespace_name,
                             } => {
                                 return self.call_function(
                                     namespace.get(name).expect(
-                                        format!("function doesn't exist in {namespace_name}")
-                                            .as_str(),
+                                        format!(
+                                            "function {name} doesn't exist in {namespace_name}",
+                                        )
+                                        .as_str(),
                                     ),
                                     args,
-                                    None,
+                                    Some(&target_object),
                                 );
                             }
                             _ => Object::Null,
@@ -537,21 +577,6 @@ impl Interpreter {
                 Object::Null
             }
 
-            Tree::Exit(code) => {
-                let exit_code = match self.interpret(code) {
-                    Object::Number(num) => num as i32,
-                    Object::Null => 0,
-                    _ => -1,
-                };
-                std::process::exit(exit_code);
-            }
-
-            Tree::Write(expr) => {
-                let expr_obj = self.interpret(expr);
-                print!("{expr_obj}");
-                Object::Null
-            }
-
             _ => Object::Null,
         }
     }
@@ -610,7 +635,13 @@ impl Interpreter {
                 self.set_var(&arg_name, value);
             }
             if let Some(obj) = slf {
-                self.set_var("self", obj.clone());
+                if let Object::NameSpace { namespace, .. } = obj {
+                    for (name, value) in namespace.iter() {
+                        self.set_var(name, value.clone());
+                    }
+                } else {
+                    self.set_var("self", obj.clone());
+                }
             }
 
             // Execute the function body
@@ -621,6 +652,12 @@ impl Interpreter {
                 Object::Ret(expr) => *expr,
                 _ => Object::Null,
             };
+        } else if let Object::NativeFn { function, .. } = function {
+            let mut args_objects = vec![];
+            call_args.iter().for_each(|arg| {
+                args_objects.push(self.interpret(arg));
+            });
+            return function(args_objects, self);
         }
         Object::Null
     }
