@@ -14,15 +14,19 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(current_path: String) -> Self {
-        let std_path = env::current_exe()
-            .expect("Can't get exe path")
-            .parent()
-            .expect("No parent directory")
-            .join(STD_DIR)
-            .to_str()
-            .unwrap()
-            .to_string();
+    pub fn new(current_path: String, std: Option<String>) -> Self {
+        let std_path = if let Some(path) = std {
+            path
+        } else {
+            env::current_exe()
+                .expect("Can't get exe path")
+                .parent()
+                .expect("No parent directory")
+                .join(STD_DIR)
+                .to_str()
+                .unwrap()
+                .to_string()
+        };
 
         Self {
             scopes: vec![FxHashMap::default()],
@@ -684,7 +688,7 @@ impl Interpreter {
     }
     fn eval_namespace(&self, path: String, parsed_trees: &Vec<Tree>) -> FxHashMap<String, Object> {
         let mut namespace = FxHashMap::default();
-        let mut mod_interpreter = Interpreter::new(path);
+        let mut mod_interpreter = Interpreter::new(path, Option::Some(self.std_path.clone()));
         parsed_trees.iter().for_each(|ast| {
             mod_interpreter.interpret(ast);
         });

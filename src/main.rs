@@ -41,42 +41,72 @@ fn main() {
             .to_str()
             .unwrap()
             .to_string();
-        interpret_mode(&mut Interpreter::new(path));
+        interpret_mode(&mut Interpreter::new(path, None));
     }
 
-    let mut file_name = "main.iok";
+    let args: Vec<String> = env::args().skip(1).collect();
 
-    args.iter().for_each(|arg| {
-        if arg.contains(".iok") {
-            file_name = &arg
+    let mut std_path: Option<String> = None;
+    let mut file_name: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--std" => {
+                i += 1;
+                if i < args.len() {
+                    std_path = Some(args[i].clone());
+                } else {
+                    eprintln!("Expected a path after --std");
+                    std::process::exit(1);
+                }
+            }
+            arg if arg.ends_with(".iok") => {
+                file_name = Some(arg.to_string());
+            }
+            _ => {}
         }
-    });
+        i += 1;
+    }
 
-    let mut input = String::new();
-    let mut file = File::open(file_name).expect(&format!("Can't open file {file_name}"));
-    file.read_to_string(&mut input).expect("can't read file");
+    if file_name.is_none() {
+        let path = env::current_dir()
+            .expect("Can't Access Dir")
+            .to_str()
+            .unwrap()
+            .to_string();
+        let mut vm = Interpreter::new(path, std_path);
+        interpret_mode(&mut vm);
+    } else {
+        let file_name = file_name.unwrap().clone();
 
-    let mut lexer = Lexer::new(&input);
-    let tokens = lexer.tokenize();
+        let mut input = String::new();
+        let mut file =
+            File::open(file_name.clone()).expect(&format!("Can't open file {}", file_name.clone()));
+        file.read_to_string(&mut input).expect("can't read file");
 
-    let mut parser = Parser::new(tokens);
+        let mut lexer = Lexer::new(&input);
+        let tokens = lexer.tokenize();
 
-    let parsed_tree = parser.parse_tokens();
+        let mut parser = Parser::new(tokens);
 
-    let dir_path = Path::new(file_name);
-    let path = if let Ok(abs_path) = dir_path.canonicalize() {
-        if let Some(parent) = abs_path.parent() {
-            parent.to_str().unwrap().to_string()
+        let parsed_tree = parser.parse_tokens();
+
+        let dir_path = Path::new(&file_name);
+        let path = if let Ok(abs_path) = dir_path.canonicalize() {
+            if let Some(parent) = abs_path.parent() {
+                parent.to_str().unwrap().to_string()
+            } else {
+                String::from("/")
+            }
         } else {
             String::from("/")
-        }
-    } else {
-        String::from("/")
-    };
+        };
 
-    let mut interpreter = Interpreter::new(path);
+        let mut interpreter = Interpreter::new(path, std_path);
 
-    parsed_tree.iter().for_each(|stmt| {
-        interpreter.interpret(stmt);
-    });
+        parsed_tree.iter().for_each(|stmt| {
+            interpreter.interpret(stmt);
+        });
+    }
 }
