@@ -8,7 +8,7 @@ IOk is a modern interpreted language focused on simplicity and performance. Buil
 
 ```rust
 // Basic syntax examples
-import std::io::write @ print
+import std::io::print
 let name = "IOk"
 print("Hello, {name}!")  // Hello, IOk!
 
