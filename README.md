@@ -68,7 +68,9 @@ cargo build --release
 ### Running Programs
 ```bash
 # Run file
-./target/release/iok examples/hello.iok
+./target/release/iok --std ./std/ ./examples/hello.iok
+# Or copy std dir to target/release/ and just run
+./target/release/iok ./examples/hello.iok
 # Start Interprter
-./target/release/iok
+./target/release/iok --std ./std/
 ```
