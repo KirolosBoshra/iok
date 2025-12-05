@@ -49,7 +49,7 @@ Functions | ✅
 Struct |  ✅
 Imports |  ✅
 STD Lib | 🚧 Work in progress
-File IO | ❌ Planned
+File IO | ⚠ Basic support for now
 Optimize | ❌ Not Planned
 
 ## Getting Started
