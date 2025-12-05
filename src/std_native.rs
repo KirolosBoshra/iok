@@ -108,10 +108,15 @@ pub fn write_file_range(args: Vec<Object>, _: &mut Interpreter) -> Object {
 }
 
 pub fn create_file(args: Vec<Object>, _: &mut Interpreter) -> Object {
-    use std::fs::File;
+    use std::fs::OpenOptions;
 
     if let Some(Object::String(filename)) = args.get(0) {
-        let file = File::create(&**filename);
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .read(true)
+            .open(&**filename);
+
         match file {
             Ok(f) => Object::File(FileHandler::new(f, (**filename).clone())),
             Err(_) => Object::Null,

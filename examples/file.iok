@@ -1,0 +1,16 @@
+import std::fs
+import std::io
+
+let file = fs::create("test.txt")
+
+if file.write("Hello, World!\n") {
+  io::println("File write successfully")
+} els {
+  io::println("Error")
+  exit(1)
+}
+
+
+let content = file.read()
+io::println("{content}")
+
