@@ -1,3 +1,4 @@
+mod file_handler;
 mod interpreter;
 mod lexer;
 mod logger;

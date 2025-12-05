@@ -1,3 +1,4 @@
+use crate::file_handler::FileHandler;
 use crate::parser::Tree;
 use crate::std_native::NativeFn;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
@@ -12,6 +13,7 @@ pub enum Object {
     List(Vec<Object>),
     Range(f64, f64),
     Ret(Box<Object>),
+    File(FileHandler),
     Fn {
         name: String,
         args: Vec<(String, Object)>,
@@ -200,6 +202,7 @@ impl fmt::Display for Object {
             }
             Object::Range(s, e) => write!(f, "{s}..{e}"),
             Object::Ret(o) => write!(f, "Ret({o})"),
+            Object::File(s) => write!(f, "File<{}>", s.path),
             Object::Fn {
                 name,
                 args,

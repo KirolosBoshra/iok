@@ -1,0 +1,37 @@
+struct File {
+  let file
+  let path
+
+  fn read() => {
+    ret __read_file(self.file)
+  }
+
+  fn read_range(start, size) => {
+    ret __read_file_range(self.file, start, end)
+  }
+
+  fn write(data) => {
+    ret __write_file(self.file, data)
+  }
+
+  fn write_at(data, start) => {
+    ret __write_file_range(self.file, data, start)
+  }
+
+}
+
+fn open(path) => {
+  let file = __open_file(path)
+  ret File {
+    path: path,
+    file: file
+  }
+}
+
+fn create(path) => { 
+  let file = __create_file(path)
+  ret File {
+    path: path,
+    file: file
+  }
+}

@@ -52,6 +52,48 @@ impl Interpreter {
                 function: std_native::get_var_from_str,
             },
         );
+        base_scope.insert(
+            "__open_file".to_string(),
+            Object::NativeFn {
+                name: "open_file".to_string(),
+                function: std_native::open_file,
+            },
+        );
+        base_scope.insert(
+            "__read_file".to_string(),
+            Object::NativeFn {
+                name: "__read_file".to_string(),
+                function: std_native::read_file,
+            },
+        );
+        base_scope.insert(
+            "__read_file_range".to_string(),
+            Object::NativeFn {
+                name: "__read_file_range".to_string(),
+                function: std_native::read_range,
+            },
+        );
+        base_scope.insert(
+            "__write_file".to_string(),
+            Object::NativeFn {
+                name: "__write_file".to_string(),
+                function: std_native::write_file,
+            },
+        );
+        base_scope.insert(
+            "__write_file_range".to_string(),
+            Object::NativeFn {
+                name: "__write_file_range".to_string(),
+                function: std_native::write_file_range,
+            },
+        );
+        base_scope.insert(
+            "__create_file".to_string(),
+            Object::NativeFn {
+                name: "__create_file".to_string(),
+                function: std_native::create_file,
+            },
+        );
 
         Self {
             scopes: vec![base_scope],
