@@ -177,12 +177,7 @@ impl Object {
                 }
                 // Replace one character at position i:
                 if let Object::String(v) = value {
-                    if v.len() == 1 && s.is_char_boundary(i) {
-                        // ponytail: direct byte write, skips replace_range splice machinery
-                        unsafe { s.as_bytes_mut()[i] = v.as_bytes()[0] };
-                    } else {
-                        s.replace_range(i..i + 1, &v);
-                    }
+                    s.replace_range(i..i + 1, &v);
                 }
             }
             _ => {}
