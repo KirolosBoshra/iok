@@ -1,18 +1,28 @@
+use crate::interner::{intern, resolve};
 use crate::std_native;
 use crate::{
     lexer::Lexer, lexer::TokenType, logger::ErrorType, logger::Logger, object::Object,
     parser::Parser, parser::Tree,
 };
 use core::iter::Iterator;
+use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
 use std::{env, fs::File, io::Read, path::Path, rc::Rc};
 
 // default dir name for std libs
 const STD_DIR: &str = "std";
 
+lazy_static! {
+    static ref M_LEN: u32 = intern("len");
+    static ref M_PUSH: u32 = intern("push");
+    static ref M_POP: u32 = intern("pop");
+    static ref M_INCLUDES: u32 = intern("includes");
+    static ref M_SELF: u32 = intern("self");
+}
+
 #[derive(Debug)]
 pub struct Interpreter {
-    scopes: Vec<FxHashMap<String, Object>>,
+    scopes: Vec<FxHashMap<u32, Object>>,
     current_path: String,
     std_path: String,
 }
@@ -20,7 +30,7 @@ pub struct Interpreter {
 macro_rules! register_native {
     ($scope:expr, $name:literal, $fn:path) => {
         $scope.insert(
-            $name.to_string(),
+            intern($name),
             Object::NativeFn {
                 name: $name.to_string(),
                 function: $fn,
@@ -77,21 +87,25 @@ impl Interpreter {
         }
     }
 
+    #[inline]
     fn enter_scope(&mut self) {
         self.scopes.push(FxHashMap::default());
     }
 
+    #[inline]
     fn exit_scope(&mut self) {
         self.scopes.pop();
     }
 
-    fn set_var(&mut self, name: &str, value: Object) {
+    #[inline]
+    fn set_var(&mut self, name: u32, value: Object) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.to_string(), value);
+            scope.insert(name, value);
         }
     }
 
-    pub fn get_var(&mut self, name: &str) -> Option<&mut Object> {
+    #[inline]
+    pub fn get_var(&mut self, name: &u32) -> Option<&mut Object> {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(value) = scope.get_mut(name) {
                 return Some(value);
@@ -100,6 +114,7 @@ impl Interpreter {
         None
     }
 
+    #[inline]
     fn bin_op(&self, left: Object, op: &TokenType, right: Object) -> Object {
         use Object::{Invalid, List, Null, Number, String};
         use TokenType::*;
@@ -107,13 +122,13 @@ impl Interpreter {
         match op {
             Plus => match (left, right) {
                 (Number(l), Number(r)) => Number(l + r),
-                (Number(l), String(r)) => String(Box::new(format!("{l}{r}"))),
+                (Number(l), String(r)) => String(Rc::new(format!("{l}{r}"))),
 
                 (String(mut l), String(r)) => {
-                    l.push_str(&r);
-                    Object::String(l) // l is already String, no new allocation
+                    Rc::make_mut(&mut l).push_str(&r);
+                    Object::String(l)
                 }
-                (String(l), r) => String(Box::new(format!("{l}{r}"))),
+                (String(l), r) => String(Rc::new(format!("{l}{r}"))),
 
                 (List(mut l), List(ref mut r)) => {
                     l.append(r);
@@ -131,14 +146,15 @@ impl Interpreter {
 
                 (Object::String(mut s), Object::Number(n)) => {
                     let n = n as usize;
+                    let s_mut = Rc::make_mut(&mut s);
                     // count total chars
-                    let total = s.chars().count();
+                    let total = s_mut.chars().count();
                     if n >= total {
-                        s.clear();
+                        s_mut.clear();
                     } else {
                         // find byte index of the cut point
-                        if let Some((byte_idx, _)) = s.char_indices().nth(total - n) {
-                            s.truncate(byte_idx);
+                        if let Some((byte_idx, _)) = s_mut.char_indices().nth(total - n) {
+                            s_mut.truncate(byte_idx);
                         }
                     }
                     Object::String(s)
@@ -147,14 +163,14 @@ impl Interpreter {
                 (Object::String(s), Object::String(r)) => {
                     // perform a global replace
                     let result = s.replace(&*r, "");
-                    Object::String(Box::new(result))
+                    Object::String(Rc::new(result))
                 }
                 _ => Null,
             },
             Multiply => match (left, right) {
                 (Number(l), Number(r)) => Number(l * r),
                 (Number(l), String(r)) | (String(r), Number(l)) => {
-                    String(Box::new(r.repeat(l as usize)))
+                    String(Rc::new(r.repeat(l as usize)))
                 }
                 (List(ref l), Number(r)) => List(
                     l.iter()
@@ -177,6 +193,7 @@ impl Interpreter {
         }
     }
 
+    #[inline]
     fn cmp_op(&self, left: Object, op: &TokenType, right: Object) -> Object {
         use Object::{Bool, Number};
 
@@ -218,7 +235,7 @@ impl Interpreter {
             Tree::Empty() => Object::Null,
             Tree::Number(num) => Object::Number(*num),
             Tree::Bool(b) => Object::Bool(*b),
-            Tree::String(s) => Object::String(s.clone()),
+            Tree::String(s) => Object::String(Rc::clone(s)),
             Tree::List(list) => {
                 let mut buf = vec![];
                 list.iter().for_each(|item| {
@@ -226,7 +243,7 @@ impl Interpreter {
                 });
                 Object::List(buf)
             }
-            Tree::Ident(var) => self.get_var(&var).unwrap_or(&mut Object::Null).clone(),
+            Tree::Ident(var) => self.get_var(var).unwrap_or(&mut Object::Null).clone(),
             Tree::Range(start, end) => {
                 let start_obj = self.interpret(start);
                 let end_obj = self.interpret(end);
@@ -236,8 +253,7 @@ impl Interpreter {
                 Object::Invalid
             }
             Tree::ListCall(var, index) => {
-                let index_num =
-                    self.interpret(index).to_number_obj().get_number_value() as usize;
+                let index_num = self.interpret(index).to_f64() as usize;
                 if let Some(var_obj) = self.interpret_mut(var) {
                     var_obj.get_list_index(index_num)
                 } else {
@@ -263,7 +279,7 @@ impl Interpreter {
                 } else {
                     v_obj
                 };
-                self.set_var(&var, value_obj);
+                self.set_var(*var, value_obj);
                 Object::Null
             }
 
@@ -287,8 +303,7 @@ impl Interpreter {
                         }
                     }
                     Tree::ListCall(var, index) => {
-                        let index_num =
-                            self.interpret(&index).to_number_obj().get_number_value() as usize;
+                        let index_num = self.interpret(&index).to_f64() as usize;
 
                         if let Some(var_obj) = self.interpret_mut(&var) {
                             var_obj.set_list_index(index_num, value_obj.clone());
@@ -306,13 +321,13 @@ impl Interpreter {
             }
 
             Tree::Fn { name, args, body } => {
-                let args_names: Vec<(String, Object)> = args
+                let args_names: Vec<(u32, Object)> = args
                     .iter()
                     .filter_map(|arg| match arg {
-                        Tree::Ident(var) => Some((var.clone(), Object::Null)),
+                        Tree::Ident(var) => Some((*var, Object::Null)),
                         Tree::Assign(var, expr) => {
                             if let Tree::Ident(name) = &**var {
-                                Some((name.to_string(), self.interpret(&expr)))
+                                Some((*name, self.interpret(&expr)))
                             } else {
                                 None
                             }
@@ -328,11 +343,11 @@ impl Interpreter {
 
                 // Create and set the function object in the environment
                 let function = Object::Fn {
-                    name: name.to_string(),
+                    name: *name,
                     args: args_names,
                     body: Rc::new(body.to_vec()),
                 };
-                self.set_var(&name, function.clone());
+                self.set_var(*name, function.clone());
                 function
             }
 
@@ -347,7 +362,7 @@ impl Interpreter {
                     self.call_function(&obj, call_args, None)
                 } else {
                     Logger::error(
-                        &format!("Undefined function: {}", name.as_str()),
+                        &format!("Undefined function: {}", resolve(*name)),
                         None,
                         ErrorType::RunTime,
                     );
@@ -362,15 +377,13 @@ impl Interpreter {
                 els_ifs,
             } => {
                 self.enter_scope();
-                let result = if self.interpret(expr).to_bool_obj().get_bool_value() {
+                let result = if self.interpret(expr).to_bool() {
                     self.eval_block(body)
                 } else {
                     els_ifs
                         .iter()
                         .find_map(|ei| match ei {
-                            Tree::ElsIf { expr, body }
-                                if self.interpret(expr).to_bool_obj().get_bool_value() =>
-                            {
+                            Tree::ElsIf { expr, body } if self.interpret(expr).to_bool() => {
                                 Some(self.eval_block(body))
                             }
                             _ => None,
@@ -384,7 +397,7 @@ impl Interpreter {
             Tree::While { expr, body } => {
                 self.enter_scope();
 
-                while self.interpret(expr).to_bool_obj().get_bool_value() {
+                while self.interpret(expr).to_bool() {
                     if let Object::Ret(v) = self.eval_block(&body) {
                         self.exit_scope();
                         return Object::Ret(v);
@@ -408,15 +421,18 @@ impl Interpreter {
                     Object::String(ref string) => Box::new(
                         string
                             .chars()
-                            .map(|c| Object::String(Box::new(c.to_string()))),
+                            .map(|c| Object::String(Rc::new(c.to_string()))),
                     ),
                     Object::List(list) => Box::new(list.into_iter()),
                     _ => return Object::Null,
                 };
 
                 self.enter_scope();
+                self.set_var(*var, Object::Null);
                 for item in iter {
-                    self.set_var(var, item);
+                    if let Some(slot) = self.scopes.last_mut().and_then(|s| s.get_mut(var)) {
+                        *slot = item;
+                    }
                     if let Object::Ret(v) = self.eval_block(body) {
                         self.exit_scope();
                         return Object::Ret(v);
@@ -436,7 +452,7 @@ impl Interpreter {
 
                 fields.iter().for_each(|field| {
                     if let Tree::Let(name, value) = field {
-                        struct_fields.insert(name.to_string(), self.interpret(value));
+                        struct_fields.insert(*name, self.interpret(value));
                     }
                 });
 
@@ -447,16 +463,16 @@ impl Interpreter {
                         body: _,
                     } = method
                     {
-                        struct_methods.insert(name.to_string(), self.interpret(method));
+                        struct_methods.insert(*name, self.interpret(method));
                     }
                 });
 
                 let def = Object::StructDef {
-                    name: struct_name.clone(),
+                    name: *struct_name,
                     fields: Rc::new(struct_fields),
                     methods: Rc::new(struct_methods),
                 };
-                self.set_var(struct_name, def.clone());
+                self.set_var(*struct_name, def.clone());
                 def
             }
 
@@ -464,7 +480,7 @@ impl Interpreter {
                 let mut def = match self.get_var(name) {
                     Some(obj) => obj.clone(),
                     None => {
-                        println!("Runtime Error: Undefined struct: {}", name);
+                        println!("Runtime Error: Undefined struct: {}", resolve(*name));
                         return Object::Null;
                     }
                 };
@@ -475,12 +491,12 @@ impl Interpreter {
                 } = def
                 {
                     fields.iter().for_each(|(field, value)| {
-                        Rc::make_mut(def_fields).insert(field.to_string(), self.interpret(value));
+                        Rc::make_mut(def_fields).insert(*field, self.interpret(value));
                     });
                     let f = (**def_fields).clone();
                     return Object::Instance {
                         struct_def: Box::new(def),
-                        fields: f,
+                        fields: Rc::new(f),
                     };
                 } else {
                     Object::Null
@@ -488,7 +504,7 @@ impl Interpreter {
             }
 
             Tree::MemberAccess { target, member } => {
-                let target_object = self.interpret(target);
+                let mut target_object = self.interpret(target);
                 match &**member {
                     Tree::Ident(name) => {
                         return target_object
@@ -498,78 +514,75 @@ impl Interpreter {
                     }
 
                     Tree::FnCall { name, args } => {
-                        let method = match target_object {
-                            Object::String(_) | Object::List(_) => {
-                                // this BS but who cares
-                                match &**name {
-                                    "len" => return Object::Number(target_object.get_len() as f64),
-                                    "push" => {
-                                        let value = self.interpret(&args[0]);
-                                        let target_mut = self.interpret_mut(target).unwrap();
-                                        if args.len() == 1 {
-                                            target_mut.push(value)
-                                        } else {
-                                            println!("Expected 1 arg found {}", args.len());
-                                            return Object::Null;
-                                        }
-                                    }
-                                    "pop" => {
-                                        let target_mut = self.interpret_mut(target).unwrap();
-                                        return target_mut.pop();
-                                    }
-                                    "includes" => {
-                                        if args.len() == 1 {
-                                            let search_string = self.interpret(&args[0]);
-                                            if let Object::String(search) = search_string {
-                                                if let Object::String(ref target) = target_object {
-                                                    return Object::Bool(
-                                                        target.contains(search.as_str()),
-                                                    );
-                                                }
-                                            }
-                                        }
+                        if let Object::String(_) | Object::List(_) = &target_object {
+                            match *name {
+                                id if id == *M_LEN => {
+                                    return Object::Number(target_object.get_len() as f64)
+                                }
+                                id if id == *M_PUSH => {
+                                    let value = self.interpret(&args[0]);
+                                    let target_mut = self.interpret_mut(target).unwrap();
+                                    if args.len() == 1 {
+                                        target_mut.push(value)
+                                    } else {
+                                        println!("Expected 1 arg found {}", args.len());
                                         return Object::Null;
                                     }
-                                    _ => {}
                                 }
-                                Object::Null
+                                id if id == *M_POP => {
+                                    let target_mut = self.interpret_mut(target).unwrap();
+                                    return target_mut.pop();
+                                }
+                                id if id == *M_INCLUDES => {
+                                    if args.len() == 1 {
+                                        let search_string = self.interpret(&args[0]);
+                                        if let Object::String(search) = search_string {
+                                            if let Object::String(ref target) = target_object {
+                                                return Object::Bool(target.contains(&*search));
+                                            }
+                                        }
+                                    }
+                                    return Object::Null;
+                                }
+                                _ => {}
                             }
-                            Object::Instance { ref struct_def, .. } => {
-                                if let Object::StructDef { methods, .. } = &**struct_def {
-                                    return self.call_function(
-                                        methods.get(name).unwrap(),
-                                        args,
-                                        Some(&target_object),
-                                    );
-                                } else {
-                                    Object::Null
+                            return Object::Null;
+                        }
+
+                        if let Object::Instance { ref struct_def, .. } = &target_object {
+                            if let Object::StructDef { methods, .. } = &**struct_def {
+                                let methods = methods.clone();
+                                if let Some(method) = methods.get(name) {
+                                    let result =
+                                        self.call_method(method, args, &mut target_object);
+                                    if let Some(slot) = self.interpret_mut(target) {
+                                        *slot = target_object;
+                                    }
+                                    return result;
                                 }
                             }
-                            Object::StructDef { ref methods, .. } => {
-                                return self.call_function(
-                                    methods.get(name).unwrap(),
-                                    args,
-                                    Some(&target_object),
-                                );
-                            }
-                            Object::NameSpace {
-                                ref namespace,
-                                name: ref namespace_name,
-                            } => {
-                                return self.call_function(
-                                    namespace.get(name).expect(
-                                        format!(
-                                            "function {name} doesn't exist in {namespace_name}",
-                                        )
-                                        .as_str(),
-                                    ),
-                                    args,
-                                    Some(&target_object),
-                                );
-                            }
-                            _ => Object::Null,
-                        };
-                        return method;
+                            return Object::Null;
+                        }
+
+                        if let Object::StructDef { ref methods, .. } = &target_object {
+                            return match methods.get(name) {
+                                Some(method) => {
+                                    self.call_function(method, args, Some(&target_object))
+                                }
+                                None => Object::Null,
+                            };
+                        }
+
+                        if let Object::NameSpace { ref namespace, .. } = &target_object {
+                            return match namespace.get(name) {
+                                Some(method) => {
+                                    self.call_function(method, args, Some(&target_object))
+                                }
+                                None => Object::Null,
+                            };
+                        }
+
+                        Object::Null
                     }
 
                     _ => Object::Null,
@@ -581,7 +594,7 @@ impl Interpreter {
             Tree::Import { path, alias } => {
                 if let Tree::MemberAccess { .. } = &**path {
                     let flat_path = self.flatten_path(path);
-                    let root_path = format!("{}/{}.iok", self.std_path, flat_path[0]);
+                    let root_path = format!("{}/{}.iok", self.std_path, resolve(flat_path[0]));
                     let root_namespace = self.import_file_to_namespace(&root_path);
 
                     let mut scope = root_namespace;
@@ -591,7 +604,12 @@ impl Interpreter {
                         let val = scope
                             .get(seg)
                             .unwrap_or_else(|| {
-                                panic!("`{}` not found in `{}`", seg, flat_path[..i].join("::"))
+                                let joined = flat_path[..i]
+                                    .iter()
+                                    .map(|id| resolve(*id))
+                                    .collect::<Vec<_>>()
+                                    .join("::");
+                                panic!("`{}` not found in `{}`", resolve(*seg), joined)
                             })
                             .clone();
                         if i < flat_path.len() - 1 {
@@ -599,28 +617,27 @@ impl Interpreter {
                                 Object::NameSpace { namespace, .. } => {
                                     scope = *namespace; // enter that namespace
                                 }
-                                _ => panic!("`{}` is not a namespace", seg),
+                                _ => panic!("`{}` is not a namespace", resolve(*seg)),
                             }
                         } else {
                             current_obj = val;
                         }
                     }
-                    let bind_name = alias.as_deref().unwrap_or(&flat_path.last().unwrap());
+                    let bind_name = alias.map(|a| a).unwrap_or(*flat_path.last().unwrap());
 
-                    self.set_var(&bind_name, current_obj);
+                    self.set_var(bind_name, current_obj);
                     return Object::Null;
                 }
 
                 let file_path = self.resolve_import_path(&**path);
                 let namespace = self.import_file_to_namespace(&file_path);
 
-                if let Some(name) = alias {
-                    let bind_name = name.as_str();
+                if let Some(name) = *alias {
                     let obj = Object::NameSpace {
-                        name: bind_name.to_string(),
+                        name,
                         namespace: Box::new(namespace),
                     };
-                    self.set_var(bind_name, obj);
+                    self.set_var(name, obj);
                 } else {
                     self.import_namespace_into_scope(namespace);
                 }
@@ -632,11 +649,12 @@ impl Interpreter {
     }
 
     // A Helper Method to mut Objects
+    #[inline]
     fn interpret_mut(&mut self, tree: &Tree) -> Option<&mut Object> {
         match tree {
-            Tree::Ident(name) => self.get_var(&name), // Return a mutable reference to the variable
+            Tree::Ident(name) => self.get_var(name), // Return a mutable reference to the variable
             Tree::ListCall(list, index) => {
-                let index_num = self.interpret(index).to_number_obj().get_number_value() as usize;
+                let index_num = self.interpret(index).to_f64() as usize;
                 if let Some(list_obj) = self.interpret_mut(list) {
                     // Get a mutable reference to the object at the specified index in the list
                     list_obj.get_list_index_mut(index_num)
@@ -645,10 +663,10 @@ impl Interpreter {
                 }
             }
             Tree::MemberAccess { target, member } => {
-                let target_obj = self.interpret_mut(target).unwrap();
-
-                if let Tree::Ident(field_name) = &**member {
-                    return target_obj.get_field_mut(field_name);
+                if let Some(target_obj) = self.interpret_mut(target) {
+                    if let Tree::Ident(field_name) = &**member {
+                        return target_obj.get_field_mut(field_name);
+                    }
                 }
                 None
             }
@@ -682,15 +700,15 @@ impl Interpreter {
                 } else {
                     default_value.clone()
                 };
-                self.set_var(&arg_name, value);
+                self.set_var(*arg_name, value);
             }
             if let Some(obj) = slf {
                 if let Object::NameSpace { namespace, .. } = obj {
                     for (name, value) in namespace.iter() {
-                        self.set_var(name, value.clone());
+                        self.set_var(*name, value.clone());
                     }
                 } else {
-                    self.set_var("self", obj.clone());
+                    self.set_var(*M_SELF, obj.clone());
                 }
             }
 
@@ -712,10 +730,36 @@ impl Interpreter {
         Object::Null
     }
 
+    fn call_method(&mut self, function: &Object, call_args: &Vec<Tree>, slf: &mut Object) -> Object {
+        if let Object::Fn { args, body, .. } = function {
+            self.enter_scope();
+            for (i, (arg_name, default_value)) in args.iter().enumerate() {
+                let value = if i < call_args.len() {
+                    self.interpret(&call_args[i])
+                } else {
+                    default_value.clone()
+                };
+                self.set_var(*arg_name, value);
+            }
+            self.set_var(*M_SELF, slf.clone());
+            let result = self.eval_block(&body);
+            // Write mutated `self` back to the caller's instance.
+            if let Some(slf_slot) = self.scopes.last_mut().and_then(|s| s.get_mut(&*M_SELF)) {
+                *slf = std::mem::take(slf_slot);
+            }
+            self.exit_scope();
+            return match result {
+                Object::Ret(expr) => *expr,
+                _ => Object::Null,
+            };
+        }
+        Object::Null
+    }
+
     fn resolve_import_path(&self, path: &Tree) -> String {
         let mut path_str = match path {
             Tree::String(p) => self.current_path.to_string() + "\\" + &**p,
-            Tree::Ident(lib) => self.std_path.to_string() + "/" + lib + ".iok",
+            Tree::Ident(lib) => self.std_path.to_string() + "/" + &resolve(*lib) + ".iok",
             _ => panic!("Expected Path or Lib name"),
         };
         if cfg!(windows) {
@@ -725,13 +769,13 @@ impl Interpreter {
         path_str
     }
 
-    fn flatten_path(&self, path: &Tree) -> Vec<String> {
+    fn flatten_path(&self, path: &Tree) -> Vec<u32> {
         match path {
-            Tree::Ident(name) => vec![name.clone()],
+            Tree::Ident(name) => vec![*name],
             Tree::MemberAccess { target, member } => {
                 let mut parts = self.flatten_path(target);
                 if let Tree::Ident(m) = &**member {
-                    parts.push(m.clone());
+                    parts.push(*m);
                     parts
                 } else {
                     panic!("Import path member must be identifier");
@@ -740,7 +784,7 @@ impl Interpreter {
             _ => panic!("Invalid import path: {:?}", path),
         }
     }
-    fn import_file_to_namespace(&self, file_path: &String) -> FxHashMap<String, Object> {
+    fn import_file_to_namespace(&self, file_path: &String) -> FxHashMap<u32, Object> {
         let parsed_trees = self.generate_ast(file_path);
         let parent_path = Path::new(file_path)
             .canonicalize()
@@ -754,9 +798,9 @@ impl Interpreter {
         self.eval_namespace(parent_path, &parsed_trees)
     }
 
-    fn import_namespace_into_scope(&mut self, namespace: FxHashMap<String, Object>) {
+    fn import_namespace_into_scope(&mut self, namespace: FxHashMap<u32, Object>) {
         for (name, value) in namespace {
-            self.set_var(&name, value);
+            self.set_var(name, value);
         }
     }
     fn generate_ast(&self, file_path: &String) -> Vec<Tree> {
@@ -773,7 +817,7 @@ impl Interpreter {
         let parsed_tree = parser.parse_tokens();
         parsed_tree
     }
-    fn eval_namespace(&self, path: String, parsed_trees: &Vec<Tree>) -> FxHashMap<String, Object> {
+    fn eval_namespace(&self, path: String, parsed_trees: &Vec<Tree>) -> FxHashMap<u32, Object> {
         let mut namespace = FxHashMap::default();
         let mut mod_interpreter = Interpreter::new(path, Option::Some(self.std_path.clone()));
         parsed_trees.iter().for_each(|ast| {
@@ -782,7 +826,7 @@ impl Interpreter {
 
         if let Some(scope) = mod_interpreter.scopes.first() {
             for (n, value) in scope {
-                namespace.insert(n.clone(), value.clone());
+                namespace.insert(*n, value.clone());
             }
         }
         namespace

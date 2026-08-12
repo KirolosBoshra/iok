@@ -1,4 +1,5 @@
 use crate::file_handler::FileHandler;
+use crate::interner::resolve;
 use crate::parser::Tree;
 use crate::socket::Socket;
 use crate::std_native::NativeFn;
@@ -8,7 +9,7 @@ use std::{fmt, ops::BitOr, rc::Rc};
 
 #[derive(Clone, Debug)]
 pub enum Object {
-    String(Box<String>),
+    String(Rc<String>),
     Number(f64),
     Bool(bool),
     List(Vec<Object>),
@@ -17,8 +18,8 @@ pub enum Object {
     File(FileHandler),
     Socket(Socket),
     Fn {
-        name: String,
-        args: Vec<(String, Object)>,
+        name: u32,
+        args: Vec<(u32, Object)>,
         body: Rc<Vec<Tree>>,
     },
     NativeFn {
@@ -26,17 +27,17 @@ pub enum Object {
         function: NativeFn,
     },
     StructDef {
-        name: Box<String>,
-        fields: Rc<FxHashMap<String, Object>>,
-        methods: Rc<FxHashMap<String, Object>>,
+        name: u32,
+        fields: Rc<FxHashMap<u32, Object>>,
+        methods: Rc<FxHashMap<u32, Object>>,
     },
     Instance {
         struct_def: Box<Object>,
-        fields: FxHashMap<String, Object>,
+        fields: Rc<FxHashMap<u32, Object>>,
     },
     NameSpace {
-        name: String,
-        namespace: Box<FxHashMap<String, Object>>,
+        name: u32,
+        namespace: Box<FxHashMap<u32, Object>>,
     },
     Null,
     Invalid,
@@ -45,11 +46,11 @@ pub enum Object {
 impl Object {
     pub fn to_string_obj(&self) -> Object {
         match self {
-            Object::String(ref s) => Object::String(Box::new(s.to_string())),
-            Object::Number(num) => Object::String(Box::new(num.to_string())),
-            Object::Bool(b) => Object::String(Box::new(b.to_string())),
-            Object::Null => Object::String(Box::new(String::new())),
-            _ => Object::String(Box::new(String::new())),
+            Object::String(ref s) => Object::String(Rc::clone(s)),
+            Object::Number(num) => Object::String(Rc::new(num.to_string())),
+            Object::Bool(b) => Object::String(Rc::new(b.to_string())),
+            Object::Null => Object::String(Rc::new(String::new())),
+            _ => Object::String(Rc::new(String::new())),
         }
     }
 
@@ -75,17 +76,35 @@ impl Object {
 
     pub fn get_string_value(&self) -> String {
         if let Object::String(s) = self.to_string_obj() {
-            *s
+            (*s).clone()
         } else {
             String::new()
         }
     }
 
-    pub fn get_number_value(&self) -> f64 {
-        if let Object::Number(n) = self {
-            *n
-        } else {
-            0.0
+    #[inline]
+    pub fn to_f64(&self) -> f64 {
+        match self {
+            Object::String(s) => s.parse().map_or(0.0, |n: f64| n),
+            Object::Number(n) => *n,
+            Object::Bool(b) => {
+                if *b {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
+        }
+    }
+
+    #[inline]
+    pub fn to_bool(&self) -> bool {
+        match self {
+            Object::String(s) => !s.is_empty(),
+            Object::Number(num) => *num != 0.0,
+            Object::Bool(b) => *b,
+            _ => false,
         }
     }
 
@@ -97,13 +116,14 @@ impl Object {
         }
     }
 
+    #[inline]
     pub fn get_list_index(&self, i: usize) -> Object {
         match self {
             Object::List(list) => list.get(i).cloned().unwrap_or(Object::Null),
             Object::String(s) => s
                 .chars()
                 .nth(i)
-                .map_or(Object::Null, |c| Object::String(Box::new(c.to_string()))),
+                .map_or(Object::Null, |c| Object::String(Rc::new(c.to_string()))),
             _ => Object::Null,
         }
     }
@@ -116,18 +136,18 @@ impl Object {
         }
     }
 
-    pub fn get_field_mut(&mut self, name: &String) -> Option<&mut Object> {
+    pub fn get_field_mut(&mut self, name: &u32) -> Option<&mut Object> {
         match self {
             Object::Instance {
                 struct_def: _,
                 ref mut fields,
-            } => fields.get_mut(name),
+            } => Rc::make_mut(fields).get_mut(name),
             Object::NameSpace { namespace, .. } => namespace.get_mut(name),
             _ => None,
         }
     }
 
-    pub fn get_field(&self, name: &String) -> Option<&Object> {
+    pub fn get_field(&self, name: &u32) -> Option<&Object> {
         match self {
             Object::Instance {
                 struct_def: _,
@@ -149,6 +169,7 @@ impl Object {
                 list[i] = value;
             }
             Object::String(s) => {
+                let s = Rc::make_mut(s);
                 if i >= s.len() {
                     let needed = i + 1 - s.len();
                     s.reserve(needed);
@@ -156,7 +177,12 @@ impl Object {
                 }
                 // Replace one character at position i:
                 if let Object::String(v) = value {
-                    s.replace_range(i..i + 1, &v);
+                    if v.len() == 1 && s.is_char_boundary(i) {
+                        // ponytail: direct byte write, skips replace_range splice machinery
+                        unsafe { s.as_bytes_mut()[i] = v.as_bytes()[0] };
+                    } else {
+                        s.replace_range(i..i + 1, &v);
+                    }
                 }
             }
             _ => {}
@@ -176,7 +202,7 @@ impl Object {
             Object::List(ref mut list) => {
                 list.push(obj);
             }
-            Object::String(ref mut s) => s.push_str(&obj.to_string()),
+            Object::String(ref mut s) => Rc::make_mut(s).push_str(&obj.to_string()),
             _ => {}
         }
     }
@@ -184,9 +210,9 @@ impl Object {
     pub fn pop(&mut self) -> Object {
         match self {
             Object::List(ref mut list) => list.pop().expect("List is empty"),
-            Object::String(ref mut s) => {
-                Object::String(Box::new(s.pop().expect("String is Empty").to_string()))
-            }
+            Object::String(ref mut s) => Object::String(Rc::new(
+                Rc::make_mut(s).pop().expect("String is Empty").to_string(),
+            )),
             _ => Object::Invalid,
         }
     }
@@ -274,18 +300,18 @@ impl fmt::Display for Object {
                 name,
                 args,
                 body: _,
-            } => write!(f, "fn {name} ({:?})", args),
+            } => write!(f, "fn {} ({:?})", resolve(*name), args),
             Object::NativeFn { name, .. } => write!(f, "NativeFn<{name}>"),
             Object::StructDef {
                 name,
                 fields: _,
                 methods: _,
-            } => write!(f, "<{name}>"),
+            } => write!(f, "<{}>", resolve(*name)),
             Object::Instance {
                 struct_def: def,
                 fields: _,
             } => write!(f, "Object{def}"),
-            Object::NameSpace { name, .. } => write!(f, "@{name}"),
+            Object::NameSpace { name, .. } => write!(f, "@{}", resolve(*name)),
             Object::Null => write!(f, "null"),
             Object::Invalid => write!(f, "invalid"),
         }
@@ -313,7 +339,7 @@ impl AddAssign for Object {
                 }
             }
             Object::String(s) => {
-                s.push_str(&rhs.to_string_obj().get_string_value());
+                Rc::make_mut(s).push_str(&rhs.to_string_obj().get_string_value());
             }
             Object::List(l) => {
                 if let Object::List(mut rl) = rhs {

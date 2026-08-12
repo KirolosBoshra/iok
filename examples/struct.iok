@@ -20,10 +20,16 @@ struct Person {
       "ID: " + self.id + "\n"
     )
   }
+
+  fn birthday(n) => {
+    self.age = self.age + n
+  }
 }
 
 let person1 = Person::new("John Doe", 21)
 let person2 = Person::new("Jane Doe", 21)
 
+person1.birthday(1)
+person1.birthday(1)
 person1.print()
 person2.print()

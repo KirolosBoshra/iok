@@ -1,7 +1,9 @@
 use crate::file_handler::FileHandler;
+use crate::interner::intern;
 use crate::interpreter::Interpreter;
 use crate::object::Object;
 use crate::socket::Socket;
+use std::rc::Rc;
 
 pub type NativeFn = fn(Vec<Object>, &mut Interpreter) -> Object;
 
@@ -15,7 +17,7 @@ pub fn native_write(args: Vec<Object>, _: &mut Interpreter) -> Object {
 pub fn socket_read_all(args: Vec<Object>, _: &mut Interpreter) -> Object {
     if let Some(Object::Socket(socket)) = args.get(0) {
         match socket.read_all() {
-            Ok(data) => Object::String(Box::new(data)),
+            Ok(data) => Object::String(Rc::new(data)),
             Err(_) => Object::Null,
         }
     } else {
@@ -29,7 +31,7 @@ pub fn native_exit(_args: Vec<Object>, _: &mut Interpreter) -> Object {
 
 pub fn get_var_from_str(args: Vec<Object>, vm: &mut Interpreter) -> Object {
     if let Some(Object::String(name)) = args.get(0) {
-        return vm.get_var(name).unwrap_or(&mut Object::Null).clone();
+        return vm.get_var(&intern(name)).unwrap_or(&mut Object::Null).clone();
     }
     Object::Null
 }
@@ -57,7 +59,7 @@ pub fn read_file(args: Vec<Object>, _: &mut Interpreter) -> Object {
         let file_content = file.read();
 
         if let Some(content) = file_content.ok() {
-            return Object::String(Box::new(content));
+            return Object::String(Rc::new(content));
         } else {
             return Object::Null;
         }
@@ -73,7 +75,7 @@ pub fn read_range(args: Vec<Object>, _: &mut Interpreter) -> Object {
 
                 if let Some(content) = file_content.ok() {
                     let content_string = String::from_utf8_lossy(&content).to_string();
-                    return Object::String(Box::new(content_string));
+                    return Object::String(Rc::new(content_string));
                 } else {
                     return Object::Null;
                 }
@@ -169,7 +171,7 @@ pub fn socket_accept(args: Vec<Object>, _: &mut Interpreter) -> Object {
 pub fn socket_read(args: Vec<Object>, _: &mut Interpreter) -> Object {
     if let Some(Object::Socket(socket)) = args.get(0) {
         match socket.read() {
-            Ok(data) => Object::String(Box::new(data)),
+            Ok(data) => Object::String(Rc::new(data)),
             Err(_) => Object::Null,
         }
     } else {
@@ -182,7 +184,7 @@ pub fn socket_read_bytes(args: Vec<Object>, _: &mut Interpreter) -> Object {
         match socket.read_bytes(*len as usize) {
             Ok(data) => {
                 let data_string = String::from_utf8_lossy(&data).to_string();
-                Object::String(Box::new(data_string))
+                Object::String(Rc::new(data_string))
             }
             Err(_) => Object::Null,
         }
@@ -224,7 +226,7 @@ pub fn socket_is_connected(args: Vec<Object>, _: &mut Interpreter) -> Object {
 pub fn socket_local_addr(args: Vec<Object>, _: &mut Interpreter) -> Object {
     if let Some(Object::Socket(socket)) = args.get(0) {
         match socket.local_addr() {
-            Ok(addr) => Object::String(Box::new(addr)),
+            Ok(addr) => Object::String(Rc::new(addr)),
             Err(_) => Object::Null,
         }
     } else {
@@ -235,7 +237,7 @@ pub fn socket_local_addr(args: Vec<Object>, _: &mut Interpreter) -> Object {
 pub fn socket_peer_addr(args: Vec<Object>, _: &mut Interpreter) -> Object {
     if let Some(Object::Socket(socket)) = args.get(0) {
         match socket.peer_addr() {
-            Ok(addr) => Object::String(Box::new(addr)),
+            Ok(addr) => Object::String(Rc::new(addr)),
             Err(_) => Object::Null,
         }
     } else {

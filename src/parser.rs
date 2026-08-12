@@ -1,19 +1,21 @@
+use crate::interner::intern;
 use crate::lexer::{Loc, Token, TokenType};
 use crate::logger::{ErrorType, Logger};
 use rustc_hash::FxHashMap;
 use std::iter::Peekable;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tree {
     Number(f64),
     Bool(bool),
-    String(Box<String>),
+    String(Rc<String>),
     List(Vec<Tree>),
-    Ident(String),
+    Ident(u32),
     Empty(),
     ListCall(Box<Tree>, Box<Tree>),
     FnCall {
-        name: String,
+        name: u32,
         args: Vec<Tree>,
     },
     MemberAccess {
@@ -25,7 +27,7 @@ pub enum Tree {
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Range(Box<Tree>, Box<Tree>),
-    Let(String, Box<Tree>),
+    Let(u32, Box<Tree>),
     Assign(Box<Tree>, Box<Tree>),
     If {
         expr: Box<Tree>,
@@ -42,27 +44,27 @@ pub enum Tree {
         body: Vec<Tree>,
     },
     For {
-        var: String,
+        var: u32,
         expr: Box<Tree>,
         body: Vec<Tree>,
     },
     Fn {
-        name: String,
+        name: u32,
         args: Vec<Tree>,
         body: Vec<Tree>,
     },
     StructDef {
-        name: Box<String>,
+        name: u32,
         fields: Vec<Tree>,
         methods: Vec<Tree>,
     },
     StructInit {
-        name: Box<String>,
-        fields: FxHashMap<String, Tree>,
+        name: u32,
+        fields: FxHashMap<u32, Tree>,
     },
     Import {
         path: Box<Tree>,
-        alias: Option<String>,
+        alias: Option<u32>,
     },
 }
 
@@ -114,11 +116,7 @@ impl Parser {
                     };
                     left = Tree::Assign(
                         Box::new(left.clone()),
-                        Box::new(Tree::BinOp(
-                            Box::new(left),
-                            op,
-                            Box::new(Tree::Number(1.0)),
-                        )),
+                        Box::new(Tree::BinOp(Box::new(left), op, Box::new(Tree::Number(1.0)))),
                     );
                 }
                 TokenType::BitAnd | TokenType::BitOR | TokenType::Shl | TokenType::Shr => {
@@ -135,10 +133,7 @@ impl Parser {
         left
     }
 
-    fn parse_or(
-        &mut self,
-        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
-    ) -> Tree {
+    fn parse_or(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
         let mut left = self.parse_and(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -156,10 +151,7 @@ impl Parser {
         left
     }
 
-    fn parse_and(
-        &mut self,
-        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
-    ) -> Tree {
+    fn parse_and(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
         let mut left = self.parse_cmp(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -177,10 +169,7 @@ impl Parser {
         left
     }
 
-    fn parse_cmp(
-        &mut self,
-        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
-    ) -> Tree {
+    fn parse_cmp(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
         let mut left = self.parse_additive(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -203,10 +192,7 @@ impl Parser {
         left
     }
 
-    fn parse_additive(
-        &mut self,
-        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
-    ) -> Tree {
+    fn parse_additive(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
         let mut left = self.parse_term(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -451,14 +437,14 @@ impl Parser {
     fn parse_struct_fields(
         &mut self,
         iter: &mut Peekable<std::slice::Iter<Token>>,
-    ) -> FxHashMap<String, Tree> {
+    ) -> FxHashMap<u32, Tree> {
         let mut map = FxHashMap::default();
         while iter.peek().unwrap().token != TokenType::CloseCurly {
             if let Some(TokenType::Ident(field_name)) =
                 self.expect_token(iter, TokenType::Ident(String::new()))
             {
                 if self.expect_token(iter, TokenType::Colon).is_some() {
-                    map.insert(field_name, self.parse_expression(iter));
+                    map.insert(intern(&field_name), self.parse_expression(iter));
                 }
                 if iter.peek().unwrap().token == TokenType::Comma {
                     iter.next();
@@ -481,13 +467,11 @@ impl Parser {
                     Tree::CmpOp(Box::new(expr), TokenType::Bang, Box::new(Tree::Empty()))
                 }
                 TokenType::Ident(string) => {
+                    let ident = intern(string);
                     if let Some(p) = iter.peek() {
                         if p.token == TokenType::OpenParen {
                             let args = self.parse_args(iter);
-                            return Tree::FnCall {
-                                name: string.to_string(),
-                                args,
-                            };
+                            return Tree::FnCall { name: ident, args };
                         }
                         if p.token == TokenType::OpenCurly {
                             let mut clone = iter.clone();
@@ -514,25 +498,22 @@ impl Parser {
                                 iter.next(); // consume the `{`
                                 let fields = self.parse_struct_fields(iter);
                                 return Tree::StructInit {
-                                    name: Box::new(string.to_string()),
+                                    name: ident,
                                     fields,
                                 };
                             }
                         }
                     }
-                    Tree::Ident(string.to_string())
+                    Tree::Ident(ident)
                 }
-                TokenType::String(string) => Tree::String(
-                    // i could use a crate for that  ig if i wanna use unicodes
-                    Box::new(
-                        string
-                            .to_string()
-                            .replace("\\n", "\n")
-                            .replace("\\t", "\t")
-                            .replace("\\r", "\r")
-                            .replace("\\\"", "\""),
-                    ),
-                ),
+                TokenType::String(string) => Tree::String(Rc::new(
+                    string
+                        .to_string()
+                        .replace("\\n", "\n")
+                        .replace("\\t", "\t")
+                        .replace("\\r", "\r")
+                        .replace("\\\"", "\""),
+                )),
                 TokenType::OpenSquare => {
                     let items = self.parse_items(iter);
                     Tree::List(items)
@@ -580,9 +561,9 @@ impl Parser {
                                 self.prev_token = next.clone();
                                 iter.next();
                                 let expr = self.parse_expression(iter);
-                                Tree::Let(var.to_string(), Box::new(expr))
+                                Tree::Let(intern(var), Box::new(expr))
                             }
-                            _ => Tree::Let(var.to_string(), Box::new(Tree::Empty())),
+                            _ => Tree::Let(intern(var), Box::new(Tree::Empty())),
                         }
                     }
                     _ => {
@@ -622,7 +603,7 @@ impl Parser {
                             let body = self.parse_block(iter);
                             self.prev_token = it.clone();
                             Tree::For {
-                                var: var.to_string(),
+                                var: intern(var),
                                 expr,
                                 body,
                             }
@@ -657,7 +638,11 @@ impl Parser {
                                 }
                             }
                         }
-                        return Tree::Fn { name, args, body };
+                        return Tree::Fn {
+                            name: intern(&name),
+                            args,
+                            body,
+                        };
                     };
                     Tree::Empty()
                 }
@@ -669,7 +654,7 @@ impl Parser {
                         if self.expect_token(iter, TokenType::OpenCurly).is_some() {
                             let (fields, methods) = self.parse_struct_body(iter);
                             return Tree::StructDef {
-                                name: Box::new(name),
+                                name: intern(&name),
                                 fields,
                                 methods,
                             };
@@ -687,7 +672,7 @@ impl Parser {
                         iter.next();
                         if let TokenType::Ident(ref name) = iter.peek().unwrap().token {
                             iter.next();
-                            alias = Some(name.to_string());
+                            alias = Some(intern(name));
                         }
                     }
                     Tree::Import { path, alias }
