@@ -22,7 +22,8 @@ lazy_static! {
 
 #[derive(Debug)]
 pub struct Interpreter {
-    scopes: Vec<FxHashMap<u32, Object>>,
+    vars: FxHashMap<u32, Vec<Object>>,
+    trail: Vec<Vec<u32>>,
     current_path: String,
     std_path: String,
 }
@@ -80,8 +81,14 @@ impl Interpreter {
         register_native!(base_scope, "__socket_peer_addr", std_native::socket_peer_addr);
         register_native!(base_scope, "__socket_read_all", std_native::socket_read_all);
 
+        let vars = base_scope
+            .into_iter()
+            .map(|(name, value)| (name, vec![value]))
+            .collect();
+
         Self {
-            scopes: vec![base_scope],
+            vars,
+            trail: vec![vec![]],
             current_path,
             std_path,
         }
@@ -89,29 +96,34 @@ impl Interpreter {
 
     #[inline]
     fn enter_scope(&mut self) {
-        self.scopes.push(FxHashMap::default());
+        self.trail.push(vec![]);
     }
 
     #[inline]
     fn exit_scope(&mut self) {
-        self.scopes.pop();
+        if let Some(bound) = self.trail.pop() {
+            for name in bound {
+                if let Some(stack) = self.vars.get_mut(&name) {
+                    stack.pop();
+                    if stack.is_empty() {
+                        self.vars.remove(&name);
+                    }
+                }
+            }
+        }
     }
 
     #[inline]
     fn set_var(&mut self, name: u32, value: Object) {
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, value);
+        if let Some(trail) = self.trail.last_mut() {
+            self.vars.entry(name).or_default().push(value);
+            trail.push(name);
         }
     }
 
     #[inline]
     pub fn get_var(&mut self, name: &u32) -> Option<&mut Object> {
-        for scope in self.scopes.iter_mut().rev() {
-            if let Some(value) = scope.get_mut(name) {
-                return Some(value);
-            }
-        }
-        None
+        self.vars.get_mut(name).and_then(|stack| stack.last_mut())
     }
 
     #[inline]
@@ -292,14 +304,11 @@ impl Interpreter {
 
                 match &**var {
                     Tree::Ident(ref name) => {
-                        for scope in self.scopes.iter_mut().rev() {
-                            if let Some(existing_value) = scope.get_mut(name) {
-                                if matches!(existing_value, Object::Fn { .. }) {
-                                    return Object::Invalid;
-                                }
-                                *existing_value = value_obj.clone();
-                                break;
+                        if let Some(existing_value) = self.get_var(name) {
+                            if matches!(existing_value, Object::Fn { .. }) {
+                                return Object::Invalid;
                             }
+                            *existing_value = value_obj.clone();
                         }
                     }
                     Tree::ListCall(var, index) => {
@@ -430,7 +439,7 @@ impl Interpreter {
                 self.enter_scope();
                 self.set_var(*var, Object::Null);
                 for item in iter {
-                    if let Some(slot) = self.scopes.last_mut().and_then(|s| s.get_mut(var)) {
+                    if let Some(slot) = self.get_var(var) {
                         *slot = item;
                     }
                     if let Object::Ret(v) = self.eval_block(body) {
@@ -744,7 +753,7 @@ impl Interpreter {
             self.set_var(*M_SELF, slf.clone());
             let result = self.eval_block(&body);
             // Write mutated `self` back to the caller's instance.
-            if let Some(slf_slot) = self.scopes.last_mut().and_then(|s| s.get_mut(&*M_SELF)) {
+            if let Some(slf_slot) = self.get_var(&*M_SELF) {
                 *slf = std::mem::take(slf_slot);
             }
             self.exit_scope();
@@ -824,8 +833,8 @@ impl Interpreter {
             mod_interpreter.interpret(ast);
         });
 
-        if let Some(scope) = mod_interpreter.scopes.first() {
-            for (n, value) in scope {
+        for (n, stack) in mod_interpreter.vars.iter() {
+            if let Some(value) = stack.first() {
                 namespace.insert(*n, value.clone());
             }
         }
