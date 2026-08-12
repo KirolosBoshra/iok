@@ -71,7 +71,8 @@ Imports |  ✅
 STD Lib | 🚧 Work in progress
 File IO | ⚠ Basic support for now
 Socket / Network | ✅
-Optimize | ❌ Not Planned
+Optimize | ⚠ I think it's fast enough for a tree-walk interprter
+Bytecode | 🚧 Not yet, but will be implemented
 
 ## Getting Started
 
