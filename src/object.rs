@@ -1,11 +1,12 @@
 use crate::file_handler::FileHandler;
 use crate::parser::Tree;
+use crate::socket::Socket;
 use crate::std_native::NativeFn;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
 use rustc_hash::FxHashMap;
 use std::{fmt, ops::BitOr};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Object {
     String(Box<String>),
     Number(f64),
@@ -14,6 +15,7 @@ pub enum Object {
     Range(f64, f64),
     Ret(Box<Object>),
     File(FileHandler),
+    Socket(Socket),
     Fn {
         name: String,
         args: Vec<(String, Object)>,
@@ -190,6 +192,70 @@ impl Object {
     }
 }
 
+// PartialEq derive trait doesn't work well with Function pointers
+impl PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Object::String(a), Object::String(b)) => a == b,
+            (Object::Number(a), Object::Number(b)) => a == b,
+            (Object::Bool(a), Object::Bool(b)) => a == b,
+            (Object::List(a), Object::List(b)) => a == b,
+            (Object::Range(a, b), Object::Range(c, d)) => a == c && b == d,
+            (Object::Ret(a), Object::Ret(b)) => a == b,
+            (Object::File(a), Object::File(b)) => a == b,
+            (Object::Socket(a), Object::Socket(b)) => a == b,
+            (
+                Object::Fn {
+                    name: n1,
+                    args: a1,
+                    body: b1,
+                },
+                Object::Fn {
+                    name: n2,
+                    args: a2,
+                    body: b2,
+                },
+            ) => n1 == n2 && a1 == a2 && b1 == b2,
+            (Object::NativeFn { name: n1, .. }, Object::NativeFn { name: n2, .. }) => n1 == n2,
+            (
+                Object::StructDef {
+                    name: n1,
+                    fields: f1,
+                    methods: m1,
+                },
+                Object::StructDef {
+                    name: n2,
+                    fields: f2,
+                    methods: m2,
+                },
+            ) => n1 == n2 && f1 == f2 && m1 == m2,
+            (
+                Object::Instance {
+                    struct_def: s1,
+                    fields: f1,
+                },
+                Object::Instance {
+                    struct_def: s2,
+                    fields: f2,
+                },
+            ) => s1 == s2 && f1 == f2,
+            (
+                Object::NameSpace {
+                    name: n1,
+                    namespace: ns1,
+                },
+                Object::NameSpace {
+                    name: n2,
+                    namespace: ns2,
+                },
+            ) => n1 == n2 && ns1 == ns2,
+            (Object::Null, Object::Null) => true,
+            (Object::Invalid, Object::Invalid) => true,
+            _ => false,
+        }
+    }
+}
+
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -203,6 +269,7 @@ impl fmt::Display for Object {
             Object::Range(s, e) => write!(f, "{s}..{e}"),
             Object::Ret(o) => write!(f, "Ret({o})"),
             Object::File(s) => write!(f, "File<{}>", s.path),
+            Object::Socket(s) => write!(f, "{s}"),
             Object::Fn {
                 name,
                 args,

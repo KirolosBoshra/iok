@@ -1,5 +1,8 @@
 use crate::std_native;
-use crate::{lexer::Lexer, lexer::TokenType, object::Object, parser::Parser, parser::Tree};
+use crate::{
+    lexer::Lexer, lexer::TokenType, logger::ErrorType, logger::Logger, object::Object,
+    parser::Parser, parser::Tree,
+};
 use core::iter::Iterator;
 use rustc_hash::FxHashMap;
 use std::{env, fs::File, io::Read, path::Path};
@@ -12,6 +15,18 @@ pub struct Interpreter {
     scopes: Vec<FxHashMap<String, Object>>,
     current_path: String,
     std_path: String,
+}
+
+macro_rules! register_native {
+    ($scope:expr, $name:literal, $fn:path) => {
+        $scope.insert(
+            $name.to_string(),
+            Object::NativeFn {
+                name: $name.to_string(),
+                function: $fn,
+            },
+        );
+    };
 }
 
 impl Interpreter {
@@ -30,70 +45,30 @@ impl Interpreter {
         };
 
         let mut base_scope = FxHashMap::default();
-        base_scope.insert(
-            "write".to_string(),
-            Object::NativeFn {
-                name: "write".to_string(),
-                function: std_native::native_write,
-            },
+        register_native!(base_scope, "write", std_native::native_write);
+        register_native!(base_scope, "exit", std_native::native_exit);
+        register_native!(base_scope, "__get_var_from_str", std_native::get_var_from_str);
+        register_native!(base_scope, "__open_file", std_native::open_file);
+        register_native!(base_scope, "__read_file", std_native::read_file);
+        register_native!(base_scope, "__read_file_range", std_native::read_range);
+        register_native!(base_scope, "__write_file", std_native::write_file);
+        register_native!(base_scope, "__write_file_range", std_native::write_file_range);
+        register_native!(base_scope, "__create_file", std_native::create_file);
+        register_native!(base_scope, "__socket_connect", std_native::socket_connect);
+        register_native!(base_scope, "__socket_bind", std_native::socket_bind);
+        register_native!(base_scope, "__socket_accept", std_native::socket_accept);
+        register_native!(base_scope, "__socket_read", std_native::socket_read);
+        register_native!(base_scope, "__socket_read_bytes", std_native::socket_read_bytes);
+        register_native!(base_scope, "__socket_write", std_native::socket_write);
+        register_native!(base_scope, "__socket_close", std_native::socket_close);
+        register_native!(
+            base_scope,
+            "__socket_is_connected",
+            std_native::socket_is_connected
         );
-        base_scope.insert(
-            "exit".to_string(),
-            Object::NativeFn {
-                name: "exit".to_string(),
-                function: std_native::native_exit,
-            },
-        );
-
-        base_scope.insert(
-            "__get_var_from_str".to_string(),
-            Object::NativeFn {
-                name: "__get_var_from_str".to_string(),
-                function: std_native::get_var_from_str,
-            },
-        );
-        base_scope.insert(
-            "__open_file".to_string(),
-            Object::NativeFn {
-                name: "open_file".to_string(),
-                function: std_native::open_file,
-            },
-        );
-        base_scope.insert(
-            "__read_file".to_string(),
-            Object::NativeFn {
-                name: "__read_file".to_string(),
-                function: std_native::read_file,
-            },
-        );
-        base_scope.insert(
-            "__read_file_range".to_string(),
-            Object::NativeFn {
-                name: "__read_file_range".to_string(),
-                function: std_native::read_range,
-            },
-        );
-        base_scope.insert(
-            "__write_file".to_string(),
-            Object::NativeFn {
-                name: "__write_file".to_string(),
-                function: std_native::write_file,
-            },
-        );
-        base_scope.insert(
-            "__write_file_range".to_string(),
-            Object::NativeFn {
-                name: "__write_file_range".to_string(),
-                function: std_native::write_file_range,
-            },
-        );
-        base_scope.insert(
-            "__create_file".to_string(),
-            Object::NativeFn {
-                name: "__create_file".to_string(),
-                function: std_native::create_file,
-            },
-        );
+        register_native!(base_scope, "__socket_local_addr", std_native::socket_local_addr);
+        register_native!(base_scope, "__socket_peer_addr", std_native::socket_peer_addr);
+        register_native!(base_scope, "__socket_read_all", std_native::socket_read_all);
 
         Self {
             scopes: vec![base_scope],
@@ -376,7 +351,11 @@ impl Interpreter {
                     let obj = var.unwrap().clone();
                     self.call_function(&obj, call_args, None)
                 } else {
-                    println!("{name} is not a function");
+                    Logger::error(
+                        &format!("Undefined function: {}", name.as_str()),
+                        None,
+                        ErrorType::RunTime,
+                    );
                     Object::Null
                 }
             }
@@ -487,7 +466,13 @@ impl Interpreter {
             }
 
             Tree::StructInit { name, fields } => {
-                let mut def = self.get_var(name).unwrap().clone();
+                let mut def = match self.get_var(name) {
+                    Some(obj) => obj.clone(),
+                    None => {
+                        println!("Runtime Error: Undefined struct: {}", name);
+                        return Object::Null;
+                    }
+                };
                 if let Object::StructDef {
                     name: _,
                     fields: ref mut def_fields,
@@ -536,6 +521,19 @@ impl Interpreter {
                                     "pop" => {
                                         let target_mut = self.interpret_mut(target).unwrap();
                                         return target_mut.pop();
+                                    }
+                                    "includes" => {
+                                        if args.len() == 1 {
+                                            let search_string = self.interpret(&args[0]);
+                                            if let Object::String(search) = search_string {
+                                                if let Object::String(ref target) = target_object {
+                                                    return Object::Bool(
+                                                        target.contains(search.as_str()),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        return Object::Null;
                                     }
                                     _ => {}
                                 }

@@ -4,6 +4,7 @@ mod lexer;
 mod logger;
 mod object;
 mod parser;
+mod socket;
 mod std_native;
 
 use interpreter::Interpreter;

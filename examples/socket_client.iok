@@ -1,0 +1,25 @@
+// Simple socket client example
+// Connects to a server and sends a message
+
+import std::net
+
+let client = net::connect("127.0.0.1", 8080)
+
+if client == null {
+    write("Failed to connect to server\n")
+} els {
+    write("Connected to server\n")
+    write("Local address: " + client.local_addr() + "\n")
+    write("Peer address: " + client.peer_addr() + "\n")
+    
+    // Send a message with newline
+    client.write("Hello from IOk client!\n")
+    
+    // Read response
+    let response = client.read()
+    write("Server response: " + response + "\n")
+    
+    // Close connection
+    client.close()
+    write("Connection closed\n")
+}

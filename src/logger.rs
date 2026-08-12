@@ -5,6 +5,7 @@ use std::fmt;
 pub enum ErrorType {
     Lexing,
     Parsing,
+    RunTime,
 }
 
 impl fmt::Display for ErrorType {
@@ -16,7 +17,11 @@ impl fmt::Display for ErrorType {
 pub struct Logger;
 
 impl Logger {
-    pub fn error(msg: &str, loc: Loc, err: ErrorType) {
-        eprintln!("{err} Error:\n\t{msg} at line {}:{}", loc.y, loc.x);
+    pub fn error(msg: &str, loc: Option<Loc>, err: ErrorType) {
+        if let Some(l) = loc {
+            eprintln!("{err} Error:\n\t{msg} at line {}:{}", l.y, l.x);
+        } else {
+            eprintln!("{err} Error:\n\t{msg}")
+        }
     }
 }

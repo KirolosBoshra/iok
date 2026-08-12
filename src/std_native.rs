@@ -1,6 +1,7 @@
 use crate::file_handler::FileHandler;
 use crate::interpreter::Interpreter;
 use crate::object::Object;
+use crate::socket::Socket;
 
 pub type NativeFn = fn(Vec<Object>, &mut Interpreter) -> Object;
 
@@ -11,12 +12,19 @@ pub fn native_write(args: Vec<Object>, _: &mut Interpreter) -> Object {
     Object::Null
 }
 
-pub fn native_exit(args: Vec<Object>, _: &mut Interpreter) -> Object {
-    if let Some(Object::Number(code)) = args.get(0) {
-        std::process::exit(*code as i32);
+pub fn socket_read_all(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Socket(socket)) = args.get(0) {
+        match socket.read_all() {
+            Ok(data) => Object::String(Box::new(data)),
+            Err(_) => Object::Null,
+        }
     } else {
-        std::process::exit(-1);
+        Object::Null
     }
+}
+
+pub fn native_exit(_args: Vec<Object>, _: &mut Interpreter) -> Object {
+    std::process::exit(0);
 }
 
 pub fn get_var_from_str(args: Vec<Object>, vm: &mut Interpreter) -> Object {
@@ -119,6 +127,115 @@ pub fn create_file(args: Vec<Object>, _: &mut Interpreter) -> Object {
 
         match file {
             Ok(f) => Object::File(FileHandler::new(f, (**filename).clone())),
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_connect(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::String(address)), Some(Object::Number(port))) = (args.get(0), args.get(1))
+    {
+        Object::Socket(Socket::new_connect((**address).clone(), *port as u16))
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_bind(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::String(address)), Some(Object::Number(port))) = (args.get(0), args.get(1))
+    {
+        match Socket::new_bind((**address).clone(), *port as u16) {
+            Ok(socket) => Object::Socket(socket),
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_accept(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Socket(socket)) = args.get(0) {
+        match socket.accept() {
+            Ok(socket) => Object::Socket(socket),
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_read(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Socket(socket)) = args.get(0) {
+        match socket.read() {
+            Ok(data) => Object::String(Box::new(data)),
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_read_bytes(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::Socket(socket)), Some(Object::Number(len))) = (args.get(0), args.get(1)) {
+        match socket.read_bytes(*len as usize) {
+            Ok(data) => {
+                let data_string = String::from_utf8_lossy(&data).to_string();
+                Object::String(Box::new(data_string))
+            }
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_write(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::Socket(socket)), Some(Object::String(data))) = (args.get(0), args.get(1)) {
+        match socket.write(&data) {
+            Ok(_) => Object::Bool(true),
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_close(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Socket(socket)) = args.get(0) {
+        match socket.close() {
+            Ok(_) => Object::Bool(true),
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_is_connected(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Socket(socket)) = args.get(0) {
+        Object::Bool(socket.is_connected())
+    } else {
+        Object::Bool(false)
+    }
+}
+
+pub fn socket_local_addr(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Socket(socket)) = args.get(0) {
+        match socket.local_addr() {
+            Ok(addr) => Object::String(Box::new(addr)),
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn socket_peer_addr(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Socket(socket)) = args.get(0) {
+        match socket.peer_addr() {
+            Ok(addr) => Object::String(Box::new(addr)),
             Err(_) => Object::Null,
         }
     } else {

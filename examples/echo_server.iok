@@ -1,0 +1,42 @@
+// Echo server example
+// Listens for connections and echoes back messages
+
+import std::net
+
+write("Starting echo server on 127.0.0.1:8080...\n")
+let server = net::bind("127.0.0.1", 8080)
+
+if server == null {
+    write("Failed to bind to 127.0.0.1:8080\n")
+} els {
+    write("Echo server listening on 127.0.0.1:8080\n")
+    write("Test with: echo 'Hello IOk!' | ncat 127.0.0.1 8080\n")
+    write("Or: ./target/release/iok --std ./std/ ./examples/echo_client.iok\n")
+    write("Press Ctrl+C to stop\n\n")
+    
+    while true {
+        let raw_client = server.accept()
+        let client = net::create_socket(raw_client)
+        
+        if client != null {
+            write("Client connected: " + client.peer_addr() + "\n")
+            
+            let data = client.read()
+            if data != "" {
+                write("Received: '" + data + "'\n")
+                client.write("Echo: " + data)
+                write("Echo sent back\n")
+            } els {
+                write("No data received (timeout)\n")
+            }
+            
+            client.close()
+            write("Client disconnected\n")
+        } els {
+            write("Failed to accept client connection\n")
+        }
+    }
+    
+    server.close()
+    write("Echo server stopped\n")
+}

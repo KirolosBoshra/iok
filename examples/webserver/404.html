@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>404 - Page Not Found | IOk Webserver</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 60px 40px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(15px);
+            border: 2px solid rgba(231, 76, 60, 0.5);
+            animation: fadeIn 1s ease-in;
+            max-width: 500px;
+        }
+        .error-code {
+            font-size: 8em;
+            font-weight: bold;
+            color: #e74c3c;
+            text-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
+            margin-bottom: 20px;
+        }
+        .error-message {
+            font-size: 1.5em;
+            margin-bottom: 30px;
+            opacity: 0.9;
+            line-height: 1.4;
+        }
+        .suggestions {
+            font-size: 1.2em;
+            opacity: 0.7;
+            margin-bottom: 30px;
+        }
+        .home-link {
+            display: inline-block;
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        .home-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">404</div>
+        <div class="error-message">
+            <p>Page Not Found</p>
+            <p>The page you requested could not be found on this server.</p>
+        </div>
+        
+        <div class="suggestions">
+            <p>Try visiting:</p>
+            <a href="/" class="home-link">🏠 Homepage</a>
+            <a href="/hello" class="home-link">👋 Hello Page</a>
+            <a href="/time" class="home-link">⏰ Time Page</a>
+            <a href="/about" class="home-link">📖 About IOk</a>
+        </div>
+    </div>
+</body>
+</html>

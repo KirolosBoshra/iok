@@ -244,7 +244,7 @@ impl Parser {
                         }
                     }
                 }
-                _ => Logger::error("Expected {{", peek.loc, ErrorType::Parsing),
+                _ => Logger::error("Expected {{", Some(peek.loc), ErrorType::Parsing),
             }
         }
         body
@@ -268,14 +268,14 @@ impl Parser {
                         "Expected token: {:?}, but found: {:?}",
                         expected, token.token
                     ),
-                    token.loc,
+                    Some(token.loc),
                     ErrorType::Parsing,
                 );
             }
         } else {
             Logger::error(
                 &format!("Expected token: {:?}, but reached end of input", expected),
-                self.prev_token.loc,
+                Some(self.prev_token.loc),
                 ErrorType::Parsing,
             );
         }
@@ -295,7 +295,7 @@ impl Parser {
                     if !els.is_empty() {
                         Logger::error(
                             "Unexpected els statements",
-                            iter.peek().unwrap().loc,
+                            Some(iter.peek().unwrap().loc),
                             ErrorType::Parsing,
                         );
                     }
@@ -332,7 +332,7 @@ impl Parser {
         }
         Logger::error(
             "Expected ] Or Items [..]",
-            self.prev_token.loc,
+            Some(self.prev_token.loc),
             ErrorType::Parsing,
         );
         items
@@ -357,7 +357,7 @@ impl Parser {
             }
             Logger::error(
                 "Expected ) Or Items (Args,..)",
-                self.prev_token.loc,
+                Some(self.prev_token.loc),
                 ErrorType::Parsing,
             );
         }
@@ -382,7 +382,7 @@ impl Parser {
 
                 _ => Logger::error(
                     "Unexpected Token",
-                    iter.peek().unwrap().loc,
+                    Some(iter.peek().unwrap().loc),
                     ErrorType::Parsing,
                 ),
             };
@@ -508,7 +508,7 @@ impl Parser {
                             _ => {
                                 Logger::error(
                                     "Expected closing parenthesis",
-                                    it.loc,
+                                    Some(it.loc),
                                     ErrorType::Parsing,
                                 );
                                 Tree::Empty()
@@ -532,7 +532,7 @@ impl Parser {
                     _ => {
                         Logger::error(
                             "Expected identifier after 'let'",
-                            it.loc,
+                            Some(it.loc),
                             ErrorType::Parsing,
                         );
                         Tree::Empty()
@@ -572,14 +572,14 @@ impl Parser {
                             }
                         }
                         _ => {
-                            Logger::error("Expected ->", it.loc, ErrorType::Parsing);
+                            Logger::error("Expected ->", Some(it.loc), ErrorType::Parsing);
                             Tree::Empty()
                         }
                     },
                     _ => {
                         Logger::error(
                             "Expected Var -> Expr..Expr or Var -> List",
-                            it.loc,
+                            Some(it.loc),
                             ErrorType::Parsing,
                         );
                         Tree::Empty()
@@ -619,7 +619,7 @@ impl Parser {
                             };
                         }
                     } else {
-                        Logger::error("Expected Struct Name", it.loc, ErrorType::Parsing);
+                        Logger::error("Expected Struct Name", Some(it.loc), ErrorType::Parsing);
                     }
                     Tree::Empty()
                 }
@@ -638,13 +638,17 @@ impl Parser {
                 }
 
                 TokenType::Els | TokenType::ElsIf => {
-                    Logger::error("Expected If statement first", it.loc, ErrorType::Parsing);
+                    Logger::error(
+                        "Expected If statement first",
+                        Some(it.loc),
+                        ErrorType::Parsing,
+                    );
                     Tree::Empty()
                 }
                 _ => {
                     Logger::error(
                         &format!("Invalid Token {:?}", it.token),
-                        it.loc,
+                        Some(it.loc),
                         ErrorType::Parsing,
                     );
                     Tree::Empty()
@@ -653,7 +657,7 @@ impl Parser {
         } else {
             Logger::error(
                 "Expected Statement",
-                self.prev_token.loc,
+                Some(self.prev_token.loc),
                 ErrorType::Parsing,
             );
             Tree::Empty()

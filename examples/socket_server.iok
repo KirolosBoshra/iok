@@ -1,0 +1,40 @@
+// Simple socket server example
+// Listens for connections and echoes back messages
+
+import std::net
+
+let server = net::bind("127.0.0.1", 8080)
+if server == null {
+    write("Failed to bind to 127.0.0.1:8080\n")
+} els {
+    write("Server listening on 127.0.0.1:8080\n")
+    
+    // Accept connections indefinitely
+    while true {
+        write("Waiting for client connection...\n")
+        let raw_client = server.accept()
+        let client = net::create_socket(raw_client)
+        
+        if client != null {
+            write("Client connected: " + client.peer_addr() + "\n")
+            
+            // Read client message
+            let data = client.read()
+            if data != "" {
+                write("Received: " + data + "\n")
+                // Echo back the message
+                client.write("Echo: " + data)
+            }
+            
+            // Close client connection
+            client.close()
+            write("Client disconnected\n")
+        } els {
+            write("Failed to accept client connection\n")
+        }
+    }
+    
+    // Close server
+    server.close()
+    write("Server stopped\n")
+}

@@ -485,7 +485,7 @@ impl<'a> Lexer<'a> {
                 _ => {
                     Logger::error(
                         &format!("Unexpected Token: {c}"),
-                        self.curr_loc,
+                        Some(self.curr_loc),
                         ErrorType::Lexing,
                     );
                     self.next();

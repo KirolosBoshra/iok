@@ -1,0 +1,84 @@
+// Webserver with file serving
+// Serves HTML files from webserver/ directory
+
+import std::io
+import std::net
+import std::fs
+
+io::print("Starting IOk webserver on 127.0.0.1:8080...\n")
+let server = net::bind("0.0.0.0", 8080)
+
+io::print("Server bind result: " + (server != null) + "\n")
+if server == null {
+    io::print("Failed to start webserver on 127.0.0.1:8080\n")
+} els {
+    io::print("Webserver running on http://127.0.0.1:8080\n")
+    io::print("Serving files from: examples/webserver/\n")
+    io::print("Press Ctrl+C to stop\n\n")
+    
+    while true {
+        let raw_client = server.accept()
+        let client = net::create_socket(raw_client)
+        
+        if client != null {
+            io::print("Client connected: " + client.peer_addr() + "\n")
+            let request = client.read()
+            
+            if request != "" {
+                io::print("Request: " + request + "\n")
+                
+                // Parse path using .includes() method
+                let path = "/404"
+                
+                if request.includes("GET /hello ") {
+                    path = "/hello"
+                } elsif request.includes("GET /time ") {
+                    path = "/time"
+                } elsif request.includes("GET /about ") {
+                    path = "/about"
+                } elsif request.includes("GET / ") {
+                    path = "/index"
+                }
+                
+                io::print("Path: " + path + "\n")
+                
+                // Try to read HTML file
+                let file_path = "examples/webserver" + path + ".html"
+                let file_obj = fs::open(file_path)
+                let html_content = null
+                if file_obj != null {
+                    html_content = file_obj.read()
+                }
+                
+                let response = ""
+                if html_content != null {
+                    // Successfully read file - serve with 200 OK
+                    response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" + html_content
+                    io::print("File found: " + file_path + "\n")
+                } els {
+                    // File not found - serve 404 page
+                    let not_found_content = read_file("examples/webserver/404.html")
+                    if not_found_content != null {
+                        response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" + not_found_content
+                    } els {
+                        // Fallback 404 if custom page not found
+                        response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body><h1>404 - Page Not Found</h1><p>The page you requested could not be found.</p><p><a href='/'>Back to Home</a></p></body></html>"
+                    }
+                    io::print("File not found: " + file_path + "\n")
+                }
+                
+                // Send response
+                client.write(response)
+                io::print("Response sent\n")
+            } els {
+                io::print("No request received (timeout)\n")
+            }
+            
+            client.close()
+            io::print("Client disconnected\n\n")
+        }
+    }
+    
+    server.close()
+    io::print("Webserver stopped\n")
+}

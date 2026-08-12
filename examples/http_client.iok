@@ -1,0 +1,19 @@
+// HTTP client example using sockets
+// Makes a simple HTTP GET request
+
+import std::net
+
+let host = "httpbin.org"
+let port = 80
+let path = "/get"
+
+write("Making HTTP GET request to http://" + host + path + "\n")
+
+let response = net::http_get(host, port, path)
+
+if response != null {
+    write("HTTP Response:\n")
+    write(response + "\n")
+} els {
+    write("Failed to make HTTP request\n")
+}

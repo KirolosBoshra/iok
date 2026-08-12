@@ -1,0 +1,30 @@
+// Echo client example
+// Connects to echo server and sends a message
+
+import std::net
+
+write("Connecting to echo server on 127.0.0.1:8080...\n")
+let client = net::connect("127.0.0.1", 8080)
+
+if client == null {
+    write("Failed to connect to echo server\n")
+} els {
+    write("Connected to echo server\n")
+    write("Local address: " + client.local_addr() + "\n")
+    write("Peer address: " + client.peer_addr() + "\n")
+    
+    // Send a message
+    client.write("Hello from IOk echo client!\n")
+    
+    // Read response
+    let response = client.read()
+    if response != "" {
+        write("Echo response: " + response + "\n")
+    } els {
+        write("No echo response received\n")
+    }
+    
+    // Close connection
+    client.close()
+    write("Connection closed\n")
+}

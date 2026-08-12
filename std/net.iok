@@ -1,0 +1,94 @@
+struct Socket {
+    let socket
+    
+    fn read() => {
+        ret __socket_read(self.socket)
+    }
+    
+    fn read_bytes(len) => {
+        ret __socket_read_bytes(self.socket, len)
+    }
+    
+    fn write(data) => {
+        ret __socket_write(self.socket, data)
+    }
+    
+    fn close() => {
+        ret __socket_close(self.socket)
+    }
+    
+    fn is_connected() => {
+        ret __socket_is_connected(self.socket)
+    }
+    
+    fn local_addr() => {
+        ret __socket_local_addr(self.socket)
+    }
+    
+    fn peer_addr() => {
+        ret __socket_peer_addr(self.socket)
+    }
+    
+    fn read_all() => {
+        ret __socket_read_all(self.socket)
+    }
+}
+
+struct Server {
+    let listener
+    
+    fn accept() => {
+        let client_socket = __socket_accept(self.listener)
+        ret client_socket
+    }
+    
+    fn close() => {
+        ret __socket_close(self.listener)
+    }
+}
+
+// Factory function to create Socket from raw socket
+fn create_socket(raw_socket) => {
+    if raw_socket != null {
+        ret Socket { socket: raw_socket }
+    } els {
+        ret null
+    }
+}
+
+// Client functions
+fn connect(address, port) => {
+    let socket = __socket_connect(address, port)
+    if socket != null {
+        ret Socket { socket: socket }
+    } els {
+        ret null
+    }
+}
+
+// Server functions  
+fn bind(address, port) => {
+    let listener = __socket_bind(address, port)
+    if listener != null {
+        ret Server { listener: listener }
+    } els {
+        ret null
+    }
+}
+
+// Utility function for simple HTTP requests
+fn http_get(host, port, path) => {
+    let client = connect(host, port)
+    if client == null {
+        ret null
+    }
+    
+    let request = "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+    client.write(request)
+    
+    let response = client.read_all()
+    client.close()
+    
+    ret response
+}
+

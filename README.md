@@ -41,6 +41,26 @@ struct Point {
 let p = Point { x: 5, y: 10 }
 p.move(3, -2)
 ```
+## Networking
+```rust
+// Networking via std/net.iok
+import "net.iok" @ net
+
+fn server() {
+    let srv = net::bind("127.0.0.1", 8080)
+    let client = srv.accept()
+    write(client.read_all())
+}
+
+fn client() {
+    let c = net::connect("127.0.0.1", 8080)
+    c.write("Hello, server!")
+    c.close()
+}
+
+// One-line HTTP GET
+let html = net::http_get("example.com", 80, "/")
+```
 ## TODO
 Task  | Implemented
 ------------- | -------------
@@ -50,6 +70,7 @@ Struct |  ✅
 Imports |  ✅
 STD Lib | 🚧 Work in progress
 File IO | ⚠ Basic support for now
+Socket / Network | ✅
 Optimize | ❌ Not Planned
 
 ## Getting Started
@@ -69,6 +90,8 @@ cargo build --release
 ```bash
 # Run file
 ./target/release/iok --std ./std/ ./examples/hello.iok
+# Run webserver example
+./target/release/iok --std ./std/ ./examples/webserver/server.iok
 # Or copy std dir to target/release/ and just run
 ./target/release/iok ./examples/hello.iok
 # Start Interprter
