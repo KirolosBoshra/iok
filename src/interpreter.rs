@@ -187,29 +187,17 @@ impl Interpreter {
             TokenType::NotEqu => return Bool(left != right),
 
             // Lazy evaluation for greater/less comparison
-            TokenType::Greater => {
-                if let (Number(left_num), Number(right_num)) = (left, right) {
-                    return Bool(left_num > right_num);
+            TokenType::Greater | TokenType::GreatEqu | TokenType::Less | TokenType::LessEqu => {
+                match (left, right) {
+                    (Number(left_num), Number(right_num)) => Bool(match op {
+                        TokenType::Greater => left_num > right_num,
+                        TokenType::GreatEqu => left_num >= right_num,
+                        TokenType::Less => left_num < right_num,
+                        TokenType::LessEqu => left_num <= right_num,
+                        _ => false,
+                    }),
+                    _ => Bool(false),
                 }
-                Bool(false)
-            }
-            TokenType::GreatEqu => {
-                if let (Number(left_num), Number(right_num)) = (left, right) {
-                    return Bool(left_num >= right_num);
-                }
-                Bool(false)
-            }
-            TokenType::Less => {
-                if let (Number(left_num), Number(right_num)) = (left, right) {
-                    return Bool(left_num < right_num);
-                }
-                Bool(false)
-            }
-            TokenType::LessEqu => {
-                if let (Number(left_num), Number(right_num)) = (left, right) {
-                    return Bool(left_num <= right_num);
-                }
-                Bool(false)
             }
 
             // Logical NOT, AND, OR operations
@@ -289,6 +277,7 @@ impl Interpreter {
                                     return Object::Invalid;
                                 }
                                 *existing_value = value_obj.clone();
+                                break;
                             }
                         }
                     }
@@ -392,7 +381,7 @@ impl Interpreter {
                 while self.interpret(expr).to_bool_obj().get_bool_value() {
                     if let Object::Ret(v) = self.eval_block(&body) {
                         self.exit_scope();
-                        return *v;
+                        return Object::Ret(v);
                     }
                 }
 
@@ -424,7 +413,7 @@ impl Interpreter {
                     self.set_var(var, item);
                     if let Object::Ret(v) = self.eval_block(body) {
                         self.exit_scope();
-                        return *v;
+                        return Object::Ret(v);
                     }
                 }
                 self.exit_scope();

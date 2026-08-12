@@ -97,6 +97,116 @@ impl Parser {
         &mut self,
         iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
     ) -> Tree {
+        let mut left = self.parse_or(iter);
+
+        while let Some(op) = iter.peek().cloned() {
+            match op.token {
+                TokenType::DDot => {
+                    iter.next();
+                    let right = self.parse_expression(iter);
+                    left = Tree::Range(Box::new(left), Box::new(right));
+                }
+                TokenType::DPlus | TokenType::DMinus => {
+                    iter.next();
+                    let op = match op.token {
+                        TokenType::DPlus => TokenType::Plus,
+                        _ => TokenType::Minus,
+                    };
+                    left = Tree::Assign(
+                        Box::new(left.clone()),
+                        Box::new(Tree::BinOp(
+                            Box::new(left),
+                            op,
+                            Box::new(Tree::Number(1.0)),
+                        )),
+                    );
+                }
+                TokenType::BitAnd | TokenType::BitOR | TokenType::Shl | TokenType::Shr => {
+                    iter.next();
+                    let right = self.parse_expression(iter);
+                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+
+                _ => break,
+            }
+            self.prev_token = op.clone();
+        }
+
+        left
+    }
+
+    fn parse_or(
+        &mut self,
+        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+    ) -> Tree {
+        let mut left = self.parse_and(iter);
+
+        while let Some(op) = iter.peek().cloned() {
+            match op.token {
+                TokenType::Or => {
+                    iter.next();
+                    let right = self.parse_and(iter);
+                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                _ => break,
+            }
+            self.prev_token = op.clone();
+        }
+
+        left
+    }
+
+    fn parse_and(
+        &mut self,
+        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+    ) -> Tree {
+        let mut left = self.parse_cmp(iter);
+
+        while let Some(op) = iter.peek().cloned() {
+            match op.token {
+                TokenType::And => {
+                    iter.next();
+                    let right = self.parse_cmp(iter);
+                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                _ => break,
+            }
+            self.prev_token = op.clone();
+        }
+
+        left
+    }
+
+    fn parse_cmp(
+        &mut self,
+        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+    ) -> Tree {
+        let mut left = self.parse_additive(iter);
+
+        while let Some(op) = iter.peek().cloned() {
+            match op.token {
+                TokenType::EquEqu
+                | TokenType::NotEqu
+                | TokenType::Greater
+                | TokenType::GreatEqu
+                | TokenType::Less
+                | TokenType::LessEqu => {
+                    iter.next();
+                    let right = self.parse_additive(iter);
+                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                _ => break,
+            }
+            self.prev_token = op.clone();
+        }
+
+        left
+    }
+
+    fn parse_additive(
+        &mut self,
+        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+    ) -> Tree {
         let mut left = self.parse_term(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -104,43 +214,6 @@ impl Parser {
                 TokenType::Plus | TokenType::Minus => {
                     iter.next();
                     let right = self.parse_term(iter);
-                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
-                }
-                TokenType::DDot => {
-                    iter.next();
-                    let right = self.parse_expression(iter);
-                    left = Tree::Range(Box::new(left), Box::new(right));
-                }
-                TokenType::DPlus => {
-                    iter.next();
-                    left = Tree::Assign(
-                        Box::new(left.clone()),
-                        Box::new(Tree::BinOp(
-                            Box::new(left),
-                            TokenType::Plus,
-                            Box::new(Tree::Number(1.0)),
-                        )),
-                    );
-                }
-                TokenType::DMinus => {
-                    iter.next();
-                    left = Tree::Assign(
-                        Box::new(left.clone()),
-                        Box::new(Tree::BinOp(
-                            Box::new(left),
-                            TokenType::Minus,
-                            Box::new(Tree::Number(1.0)),
-                        )),
-                    );
-                }
-                TokenType::BitAnd | TokenType::BitOR => {
-                    iter.next();
-                    let right = self.parse_expression(iter);
-                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
-                }
-                TokenType::Shl | TokenType::Shr => {
-                    iter.next();
-                    let right = self.parse_expression(iter);
                     left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
 
@@ -167,11 +240,6 @@ impl Parser {
                     let expr = self.parse_expression(iter);
                     left = Tree::Assign(Box::new(left), Box::new(expr));
                 }
-                TokenType::EquEqu | TokenType::NotEqu => {
-                    iter.next();
-                    let right = self.parse_factor(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
-                }
 
                 TokenType::PlusEqu => {
                     iter.next();
@@ -184,16 +252,6 @@ impl Parser {
                             Box::new(right),
                         )),
                     );
-                }
-                TokenType::Greater | TokenType::GreatEqu | TokenType::Less | TokenType::LessEqu => {
-                    iter.next();
-                    let right = self.parse_term(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
-                }
-                TokenType::And | TokenType::Or => {
-                    iter.next();
-                    let right = self.parse_expression(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
                 }
                 TokenType::OpenSquare => {
                     iter.next();
@@ -314,54 +372,52 @@ impl Parser {
         }
     }
 
-    fn parse_items(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
+    fn parse_delimited(
+        &mut self,
+        iter: &mut Peekable<std::slice::Iter<Token>>,
+        close: TokenType,
+        item: fn(&mut Self, &mut Peekable<std::slice::Iter<Token>>) -> Tree,
+        err_msg: &str,
+    ) -> Vec<Tree> {
         let mut items = vec![];
-        while let Some(item) = iter.peek() {
-            match item.token {
-                TokenType::CloseSquare => {
-                    iter.next();
-                    return items;
-                }
+        while let Some(token) = iter.peek() {
+            match token.token {
                 TokenType::Comma => {
                     iter.next();
                 }
+                _ if token.token == close => {
+                    iter.next();
+                    return items;
+                }
                 _ => {
-                    items.push(self.parse_factor(iter));
+                    items.push(item(self, iter));
                 }
             }
         }
-        Logger::error(
-            "Expected ] Or Items [..]",
-            Some(self.prev_token.loc),
-            ErrorType::Parsing,
-        );
+        Logger::error(err_msg, Some(self.prev_token.loc), ErrorType::Parsing);
         items
     }
 
+    fn parse_items(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
+        self.parse_delimited(
+            iter,
+            TokenType::CloseSquare,
+            Parser::parse_factor,
+            "Expected ] Or Items [..]",
+        )
+    }
+
     fn parse_args(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
-        let mut args = vec![];
         if self.expect_token(iter, TokenType::OpenParen).is_some() {
-            while let Some(item) = iter.peek() {
-                match item.token {
-                    TokenType::CloseParen => {
-                        iter.next();
-                        return args;
-                    }
-                    TokenType::Comma => {
-                        iter.next();
-                    }
-                    _ => {
-                        args.push(self.parse_expression(iter));
-                    }
-                }
-            }
-            Logger::error(
+            self.parse_delimited(
+                iter,
+                TokenType::CloseParen,
+                Parser::parse_expression,
                 "Expected ) Or Items (Args,..)",
-                Some(self.prev_token.loc),
-                ErrorType::Parsing,
-            );
+            )
+        } else {
+            vec![]
         }
-        args
     }
 
     fn parse_struct_body(
