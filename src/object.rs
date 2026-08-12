@@ -4,7 +4,7 @@ use crate::socket::Socket;
 use crate::std_native::NativeFn;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
 use rustc_hash::FxHashMap;
-use std::{fmt, ops::BitOr};
+use std::{fmt, ops::BitOr, rc::Rc};
 
 #[derive(Clone, Debug)]
 pub enum Object {
@@ -19,7 +19,7 @@ pub enum Object {
     Fn {
         name: String,
         args: Vec<(String, Object)>,
-        body: Vec<Tree>,
+        body: Rc<Vec<Tree>>,
     },
     NativeFn {
         name: String,
@@ -27,8 +27,8 @@ pub enum Object {
     },
     StructDef {
         name: Box<String>,
-        fields: Box<FxHashMap<String, Object>>,
-        methods: Box<FxHashMap<String, Object>>,
+        fields: Rc<FxHashMap<String, Object>>,
+        methods: Rc<FxHashMap<String, Object>>,
     },
     Instance {
         struct_def: Box<Object>,

@@ -1,6 +1,6 @@
 // Reference https://gist.github.com/rexim/c595009436f87ca076e7c4a2fb92ce10
 
-let BOARD_CAP = 30
+let BOARD_CAP = 1000
 let signs = [" ", "#"]
 
 let board = [0] * BOARD_CAP

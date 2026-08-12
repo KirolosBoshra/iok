@@ -5,7 +5,7 @@ use crate::{
 };
 use core::iter::Iterator;
 use rustc_hash::FxHashMap;
-use std::{env, fs::File, io::Read, path::Path};
+use std::{env, fs::File, io::Read, path::Path, rc::Rc};
 
 // default dir name for std libs
 const STD_DIR: &str = "std";
@@ -85,11 +85,10 @@ impl Interpreter {
         self.scopes.pop();
     }
 
-    fn set_var(&mut self, name: &str, value: Object) -> &mut Object {
+    fn set_var(&mut self, name: &str, value: Object) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name.to_string(), value);
         }
-        self.get_var(name).unwrap()
     }
 
     pub fn get_var(&mut self, name: &str) -> Option<&mut Object> {
@@ -236,9 +235,15 @@ impl Interpreter {
                 }
                 Object::Invalid
             }
-            Tree::ListCall(var, index) => self
-                .interpret(var)
-                .get_list_index(self.interpret(index).to_number_obj().get_number_value() as usize),
+            Tree::ListCall(var, index) => {
+                let index_num =
+                    self.interpret(index).to_number_obj().get_number_value() as usize;
+                if let Some(var_obj) = self.interpret_mut(var) {
+                    var_obj.get_list_index(index_num)
+                } else {
+                    self.interpret(var).get_list_index(index_num)
+                }
+            }
             Tree::Ret(expr) => Object::Ret(Box::new(self.interpret(expr))),
             Tree::BinOp(left, op, right) => {
                 let left_obj = self.interpret(left);
@@ -325,9 +330,10 @@ impl Interpreter {
                 let function = Object::Fn {
                     name: name.to_string(),
                     args: args_names,
-                    body: body.to_vec(),
+                    body: Rc::new(body.to_vec()),
                 };
-                self.set_var(&name, function).clone()
+                self.set_var(&name, function.clone());
+                function
             }
 
             Tree::FnCall {
@@ -447,8 +453,8 @@ impl Interpreter {
 
                 let def = Object::StructDef {
                     name: struct_name.clone(),
-                    fields: Box::new(struct_fields),
-                    methods: Box::new(struct_methods),
+                    fields: Rc::new(struct_fields),
+                    methods: Rc::new(struct_methods),
                 };
                 self.set_var(struct_name, def.clone());
                 def
@@ -469,9 +475,9 @@ impl Interpreter {
                 } = def
                 {
                     fields.iter().for_each(|(field, value)| {
-                        def_fields.insert(field.to_string(), self.interpret(value));
+                        Rc::make_mut(def_fields).insert(field.to_string(), self.interpret(value));
                     });
-                    let f = *def_fields.clone();
+                    let f = (**def_fields).clone();
                     return Object::Instance {
                         struct_def: Box::new(def),
                         fields: f,
