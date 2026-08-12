@@ -92,6 +92,8 @@ cargo build --release
 ./target/release/iok --std ./std/ ./examples/hello.iok
 # Run webserver example
 ./target/release/iok --std ./std/ ./examples/webserver/server.iok
+# Run TODO web app example (open http://127.0.0.1:8081/)
+./target/release/iok --std ./std/ ./examples/todo_web/server.iok
 # Or copy std dir to target/release/ and just run
 ./target/release/iok ./examples/hello.iok
 # Start Interprter

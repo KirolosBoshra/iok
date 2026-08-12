@@ -1,0 +1,359 @@
+// IOk web TODO app - showcases sockets, file storage, structs, lists, strings
+//
+// Run:
+//   ./target/release/iok --std ./std/ ./examples/todo_web/server.iok
+// Then open http://127.0.0.1:8081/ in your browser.
+//
+// Tasks live in todo.txt next to this script (100 fixed-size records of 64
+// bytes each - the whole file is rewritten on every change, since the file
+// API can't truncate).
+
+import std::io
+import std::fs
+import std::net
+
+let PORT = 8081
+let MAX_TASKS = 100
+let TITLE_W = 57
+let RECORD = 64
+let FILE = "todo.txt"
+
+// ---------------------------------------------------------------------------
+// Task model
+// ---------------------------------------------------------------------------
+
+struct Task {
+  let title
+  let done
+
+  fn new(title, done=false) => {
+    ret Task {
+      title: title,
+      done: done,
+    }
+  }
+}
+
+// Pad or truncate the title to exactly TITLE_W chars (no substr in IOk)
+fn field(title) => {
+  if title.len() >= TITLE_W {
+    let t = ""
+    let i = 0
+    while i < TITLE_W {
+      t += title[i]
+      i++
+    }
+    ret t
+  }
+  ret title + " " * (TITLE_W - title.len())
+}
+
+fn record_of(task) => {
+  let flag = "0"
+  if task.done {
+    flag = "1"
+  }
+  ret field(task.title) + "|" + flag + "\n" + " " * (RECORD - TITLE_W - 3)
+}
+
+fn title_at(content, off) => {
+  // copy the record title, trimming trailing padding spaces
+  let last = -1
+  let i = 0
+  while i < TITLE_W {
+    if content[off + i] != " " {
+      last = i
+    }
+    i++
+  }
+  let t = ""
+  let j = 0
+  while j <= last {
+    t += content[off + j]
+    j++
+  }
+  ret t
+}
+
+fn load_tasks() => {
+  let tasks = []
+  let f = fs::open(FILE)
+  let content = f.read()
+  let off = 0
+  while off + RECORD <= content.len() {
+    let flag = content[off + TITLE_W + 1]
+    if flag == "1" {
+      tasks.push(Task::new(title_at(content, off), true))
+    } els {
+      if flag == "0" {
+        tasks.push(Task::new(title_at(content, off)))
+      }
+    }
+    off += RECORD
+  }
+  ret tasks
+}
+
+fn save_tasks(tasks) => {
+  let buf = ""
+  let i = 0
+  while i < MAX_TASKS {
+    if i < tasks.len() {
+      buf += record_of(tasks[i])
+    } els {
+      buf += " " * RECORD
+    }
+    i++
+  }
+  let f = fs::open(FILE)
+  f.write_at(buf, 0)
+}
+
+fn remove_at(tasks, idx) => {
+  let out = []
+  let i = 0
+  while i < tasks.len() {
+    if i != idx {
+      out.push(tasks[i])
+    }
+    i++
+  }
+  ret out
+}
+
+// ---------------------------------------------------------------------------
+// String helpers (no split/substr/ord in IOk - scan by hand)
+// ---------------------------------------------------------------------------
+
+fn decode(s) => {
+  // form-encoded: '+' means space (no chr() so %XX is left as-is)
+  let out = ""
+  let i = 0
+  while i < s.len() {
+    if s[i] == "+" {
+      out += " "
+    } els {
+      out += s[i]
+    }
+    i++
+  }
+  ret out
+}
+
+fn escape(s) => {
+  // minimal HTML escaping so task titles can't inject markup
+  let out = ""
+  let i = 0
+  while i < s.len() {
+    if s[i] == "&" {
+      out += "&amp;"
+    } els {
+      if s[i] == "<" {
+        out += "&lt;"
+      } els {
+        out += s[i]
+      }
+    }
+    i++
+  }
+  ret out
+}
+
+// Extract the path from a request line: "GET /add?task=x HTTP/1.1" -> "/add?task=x"
+fn path_of(line) => {
+  let l = line + " "
+  let i = 0
+  while l[i] != " " {
+    i++
+  }
+  i++
+  let path = ""
+  while i < l.len() && l[i] != " " {
+    path += l[i]
+    i++
+  }
+  ret path
+}
+
+// Value of key= inside the query string, or ""
+fn param(path, key) => {
+  let k = key + "="
+  let p = path + "&"
+  let value = ""
+  let i = 0
+  while i < p.len() {
+    if p[i] == k[0] {
+      let ok = true
+      let m = 0
+      while m < k.len() {
+        if p[i + m] != k[m] {
+          ok = false
+        }
+        m++
+      }
+      if ok {
+        let start = i + k.len()
+        while start < p.len() && p[start] != "&" {
+          value += p[start]
+          start++
+        }
+        ret value
+      }
+    }
+    i++
+  }
+  ret value
+}
+
+fn digit(c) => {
+  let d = 0
+  while d < 10 {
+    if c == "0123456789"[d] {
+      ret d
+    }
+    d++
+  }
+  ret -1
+}
+
+fn parse_index(s) => {
+  let n = 0
+  let i = 0
+  while i < s.len() {
+    let d = digit(s[i])
+    if d >= 0 {
+      n = n * 10 + d
+    }
+    i++
+  }
+  ret n
+}
+
+// ---------------------------------------------------------------------------
+// HTTP
+// ---------------------------------------------------------------------------
+
+fn response(status, body) => {
+  ret "HTTP/1.1 " + status + "\r\nContent-Length: " + body.len() +
+    "\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n" + body
+}
+
+fn redirect() => {
+  ret "HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+}
+
+fn not_found() => {
+  ret "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+}
+
+fn page(tasks) => {
+  let rows = ""
+  let i = 0
+  while i < tasks.len() {
+    let mark = "[ ]"
+    if tasks[i].done {
+      mark = "[x]"
+    }
+    rows += "  <li><span>" + mark + " " + escape(tasks[i].title) + "</span>" +
+      "<a href='/toggle?index=" + i + "'>toggle</a>" +
+      "<a href='/delete?index=" + i + "'>delete</a></li>\n"
+    i++
+  }
+  if rows == "" {
+    rows = "  <li class='empty'>No tasks yet - add one above!</li>\n"
+  }
+  let body =
+    "<!DOCTYPE html>\n<html>\n<head>\n<meta charset='utf-8'>\n" +
+    "<meta name='viewport' content='width=device-width, initial-scale=1'>\n" +
+    "<title>IOk TODO</title>\n" +
+    "<style>\n" +
+    "body { font-family: system-ui, sans-serif; max-width: 520px; margin: 3rem auto; padding: 0 1rem; background: #1b1f2a; color: #e8e8ec; }\n" +
+    "h1 { color: #7aa2f7; margin-bottom: 0; }\n" +
+    "p.sub { color: #6a7080; font-size: .85rem; margin-top: .25rem; }\n" +
+    "form { display: flex; gap: .5rem; margin: 1.5rem 0; }\n" +
+    "input { flex: 1; padding: .6rem; border: 1px solid #3a3f52; border-radius: 6px; background: #262b3a; color: #e8e8ec; }\n" +
+    "button { padding: .6rem 1rem; border: none; border-radius: 6px; background: #7aa2f7; color: #1b1f2a; font-weight: bold; cursor: pointer; }\n" +
+    "ul { list-style: none; padding: 0; }\n" +
+    "li { display: flex; align-items: center; gap: .75rem; padding: .55rem .75rem; margin-bottom: .5rem; background: #262b3a; border-radius: 6px; }\n" +
+    "li span { flex: 1; }\n" +
+    "li a { color: #7aa2f7; font-size: .85rem; text-decoration: none; }\n" +
+    "li a:last-child { color: #f7768e; }\n" +
+    "li.empty { color: #6a7080; font-style: italic; }\n" +
+    "</style>\n</head>\n<body>\n" +
+    "<h1>IOk TODO</h1>\n<p class='sub'>served by IOk from " + FILE + "</p>\n" +
+    "<form action='/add' method='GET'>\n" +
+    "  <input type='text' name='task' placeholder='New task...' maxlength='57' required>\n" +
+    "  <button type='submit'>Add</button>\n" +
+    "</form>\n<ul>\n" + rows + "</ul>\n</body>\n</html>\n"
+  ret response("200 OK", body)
+}
+
+// Build a response for one request; todo.txt is the only state
+fn handle(request_line) => {
+  let path = path_of(request_line)
+  let tasks = load_tasks()
+  if path == "/" {
+    ret page(tasks)
+  }
+  if path.includes("/add?") {
+    let title = decode(param(path, "task"))
+    if title.len() > 0 {
+      tasks.push(Task::new(title))
+      save_tasks(tasks)
+    }
+    ret redirect()
+  }
+  if path.includes("/toggle?") {
+    let idx = parse_index(param(path, "index"))
+    if idx < tasks.len() {
+      if tasks[idx].done {
+        tasks[idx].done = false
+      } els {
+        tasks[idx].done = true
+      }
+      save_tasks(tasks)
+    }
+    ret redirect()
+  }
+  if path.includes("/delete?") {
+    let idx = parse_index(param(path, "index"))
+    if idx < tasks.len() {
+      tasks = remove_at(tasks, idx)
+      save_tasks(tasks)
+    }
+    ret redirect()
+  }
+  ret not_found()
+}
+
+// ---------------------------------------------------------------------------
+// Server loop
+// ---------------------------------------------------------------------------
+
+io::println("IOk TODO server on 127.0.0.1:" + PORT + "  (Ctrl+C to stop)")
+io::println("Open http://127.0.0.1:" + PORT + "/ in your browser")
+
+let server = net::bind("127.0.0.1", PORT)
+if server == null {
+  io::println("Failed to bind port " + PORT + " - already in use?")
+  exit()
+} els {
+  while true {
+    let raw = server.accept()
+    let client = net::create_socket(raw)
+    if client != null {
+      let request_line = client.read()
+      if request_line != "" {
+        // drain the headers up to the empty line
+        let line = client.read()
+        while line != "" {
+          line = client.read()
+        }
+        let resp = handle(request_line)
+        client.write(resp)
+      }
+      client.close()
+    }
+  }
+  server.close()
+}
