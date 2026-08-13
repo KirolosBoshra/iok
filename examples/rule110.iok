@@ -1,5 +1,7 @@
 // Reference https://gist.github.com/rexim/c595009436f87ca076e7c4a2fb92ce10
 
+import std::io
+
 let BOARD_CAP = 1000
 let signs = [" ", "#"]
 
@@ -23,5 +25,4 @@ for i -> 0..(BOARD_CAP - 2) {
     }
 }
 
-// using write instead of io::println for faster printing
-write(output + "\n")
+io::println(output)

@@ -29,6 +29,13 @@ pub fn native_exit(_args: Vec<Object>, _: &mut Interpreter) -> Object {
     std::process::exit(0);
 }
 
+pub fn native_chr(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::Number(n)) = args.first() {
+        return Object::String(Rc::new(char::from(*n as u8).to_string()));
+    }
+    Object::Null
+}
+
 pub fn get_var_from_str(args: Vec<Object>, vm: &mut Interpreter) -> Object {
     if let Some(Object::String(name)) = args.get(0) {
         return vm.get_var(&intern(name)).unwrap_or(&mut Object::Null).clone();

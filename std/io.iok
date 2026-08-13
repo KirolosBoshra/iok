@@ -1,27 +1,13 @@
 fn print(str) => {
   let output = ""
-  
-  let i = 0
-  
-  while i < str.len() {
-    if str[i] == "{" {
-      i++
-      let var = ""
-      while str[i] != "}" { 
-        var += str[i]
-        if i >= str.len() {
-          write("Expected }")
-          exit(-1)
-        }
-        i++
-      }
 
-      let value = __get_var_from_str(var)
-      output += value
+  for part -> str.split("{") {
+    let bits = part.split("}")
+    if bits.len() == 2 {
+      output += __get_var_from_str(bits[0]) + bits[1]
     } els {
-      output += str[i]
+      output += part
     }
-    i++
   }
 
   write(output)

@@ -24,6 +24,8 @@ pub enum Tree {
     },
 
     Ret(Box<Tree>),
+    Break,
+    Continue,
     BinOp(Box<Tree>, TokenType, Box<Tree>),
     CmpOp(Box<Tree>, TokenType, Box<Tree>),
     Range(Box<Tree>, Box<Tree>),
@@ -531,6 +533,8 @@ impl Parser {
                     self.prev_token = it.clone();
                     Tree::Ret(Box::new(self.parse_expression(iter)))
                 }
+                TokenType::Break => Tree::Break,
+                TokenType::Continue => Tree::Continue,
                 TokenType::OpenParen => match iter.peek() {
                     Some(tok) if tok.token == TokenType::CloseParen => {
                         iter.next();

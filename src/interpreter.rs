@@ -13,10 +13,6 @@ use std::{env, fs::File, io::Read, path::Path, rc::Rc};
 const STD_DIR: &str = "std";
 
 lazy_static! {
-    static ref M_LEN: u32 = intern("len");
-    static ref M_PUSH: u32 = intern("push");
-    static ref M_POP: u32 = intern("pop");
-    static ref M_INCLUDES: u32 = intern("includes");
     static ref M_SELF: u32 = intern("self");
 }
 
@@ -58,6 +54,7 @@ impl Interpreter {
         let mut base_scope = FxHashMap::default();
         register_native!(base_scope, "write", std_native::native_write);
         register_native!(base_scope, "exit", std_native::native_exit);
+        register_native!(base_scope, "chr", std_native::native_chr);
         register_native!(base_scope, "__get_var_from_str", std_native::get_var_from_str);
         register_native!(base_scope, "__open_file", std_native::open_file);
         register_native!(base_scope, "__read_file", std_native::read_file);
@@ -273,6 +270,8 @@ impl Interpreter {
                 }
             }
             Tree::Ret(expr) => Object::Ret(Box::new(self.interpret(expr))),
+            Tree::Break => Object::Break,
+            Tree::Continue => Object::Continue,
             Tree::BinOp(left, op, right) => {
                 let left_obj = self.interpret(left);
                 let right_obj = self.interpret(right);
@@ -407,9 +406,13 @@ impl Interpreter {
                 self.enter_scope();
 
                 while self.interpret(expr).to_bool() {
-                    if let Object::Ret(v) = self.eval_block(&body) {
-                        self.exit_scope();
-                        return Object::Ret(v);
+                    match self.eval_block(&body) {
+                        Object::Ret(v) => {
+                            self.exit_scope();
+                            return Object::Ret(v);
+                        }
+                        Object::Break => break,
+                        _ => {}
                     }
                 }
 
@@ -442,9 +445,13 @@ impl Interpreter {
                     if let Some(slot) = self.get_var(var) {
                         *slot = item;
                     }
-                    if let Object::Ret(v) = self.eval_block(body) {
-                        self.exit_scope();
-                        return Object::Ret(v);
+                    match self.eval_block(body) {
+                        Object::Ret(v) => {
+                            self.exit_scope();
+                            return Object::Ret(v);
+                        }
+                        Object::Break => break,
+                        _ => {}
                     }
                 }
                 self.exit_scope();
@@ -527,54 +534,19 @@ impl Interpreter {
                             .interpret_mut(target)
                             .is_some_and(|t| matches!(t, Object::String(_) | Object::List(_)));
                         if on_simple_var {
-                            return match *name {
-                                id if id == *M_LEN => {
-                                    Object::Number(self.interpret_mut(target).unwrap().get_len() as f64)
-                                }
-                                id if id == *M_PUSH => {
-                                    if args.len() != 1 {
-                                        println!("Expected 1 arg found {}", args.len());
-                                        return Object::Null;
-                                    }
-                                    let value = self.interpret(&args[0]);
-                                    self.interpret_mut(target).unwrap().push(value);
-                                    Object::Null
-                                }
-                                id if id == *M_POP => self.interpret_mut(target).unwrap().pop(),
-                                id if id == *M_INCLUDES => {
-                                    if args.len() == 1 {
-                                        if let Object::String(search) = self.interpret(&args[0]) {
-                                            if let Object::String(t) =
-                                                self.interpret_mut(target).unwrap()
-                                            {
-                                                return Object::Bool(t.contains(&*search));
-                                            }
-                                        }
-                                    }
-                                    Object::Null
-                                }
-                                _ => Object::Null,
-                            };
+                            let arg_objs: Vec<Object> =
+                                args.iter().map(|a| self.interpret(a)).collect();
+                            return self
+                                .interpret_mut(target)
+                                .unwrap()
+                                .simple_method(*name, &arg_objs);
                         }
 
                         let mut target_object = self.interpret(target);
                         if let Object::String(_) | Object::List(_) = &target_object {
-                            return match *name {
-                                id if id == *M_LEN => {
-                                    Object::Number(target_object.get_len() as f64)
-                                }
-                                id if id == *M_INCLUDES => {
-                                    if args.len() == 1 {
-                                        if let Object::String(search) = self.interpret(&args[0]) {
-                                            if let Object::String(t) = &target_object {
-                                                return Object::Bool(t.contains(&*search));
-                                            }
-                                        }
-                                    }
-                                    Object::Null
-                                }
-                                _ => Object::Null,
-                            };
+                            let arg_objs: Vec<Object> =
+                                args.iter().map(|a| self.interpret(a)).collect();
+                            return target_object.simple_method(*name, &arg_objs);
                         }
 
                         if let Object::Instance { ref struct_def, .. } = &target_object {
@@ -707,7 +679,7 @@ impl Interpreter {
         let mut result = Object::Null;
         for stmt in body {
             result = self.interpret(stmt);
-            if let Object::Ret(_) = result {
+            if let Object::Ret(_) | Object::Break | Object::Continue = result {
                 break;
             }
         }

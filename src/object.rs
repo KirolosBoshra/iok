@@ -1,11 +1,28 @@
 use crate::file_handler::FileHandler;
-use crate::interner::resolve;
+use crate::interner::{intern, resolve};
 use crate::parser::Tree;
 use crate::socket::Socket;
 use crate::std_native::NativeFn;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
+use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
 use std::{fmt, ops::BitOr, rc::Rc};
+
+lazy_static! {
+    pub static ref M_LEN: u32 = intern("len");
+    pub static ref M_PUSH: u32 = intern("push");
+    pub static ref M_POP: u32 = intern("pop");
+    pub static ref M_INCLUDES: u32 = intern("includes");
+    pub static ref M_JOIN: u32 = intern("join");
+    pub static ref M_SUBSTR: u32 = intern("substr");
+    pub static ref M_SPLIT: u32 = intern("split");
+    pub static ref M_ORD: u32 = intern("ord");
+    pub static ref M_TRIM: u32 = intern("trim");
+    pub static ref M_UPPER: u32 = intern("to_upper");
+    pub static ref M_LOWER: u32 = intern("to_lower");
+    pub static ref M_TO_NUMBER: u32 = intern("to_number");
+    pub static ref M_REPLACE: u32 = intern("replace");
+}
 
 #[derive(Clone, Debug)]
 pub enum Object {
@@ -41,6 +58,8 @@ pub enum Object {
     },
     Null,
     Invalid,
+    Break,
+    Continue,
 }
 
 impl Object {
@@ -192,6 +211,115 @@ impl Object {
         }
     }
 
+    pub fn simple_method(&mut self, name: u32, args: &[Object]) -> Object {
+        match name {
+            id if id == *M_LEN => Object::Number(self.get_len() as f64),
+            id if id == *M_PUSH => {
+                if args.len() != 1 {
+                    println!("Expected 1 arg found {}", args.len());
+                    return Object::Null;
+                }
+                self.push(args[0].clone());
+                Object::Null
+            }
+            id if id == *M_POP => self.pop(),
+            id if id == *M_INCLUDES => {
+                if let Some(Object::String(search)) = args.first() {
+                    if let Object::String(s) = self {
+                        return Object::Bool(s.contains(search.as_str()));
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_JOIN => {
+                if let Some(Object::String(sep)) = args.first() {
+                    if let Object::List(items) = self {
+                        let joined = items
+                            .iter()
+                            .map(|o| o.to_string())
+                            .collect::<Vec<_>>()
+                            .join(sep.as_str());
+                        return Object::String(Rc::new(joined));
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_SUBSTR => {
+                if let (Some(Object::Number(start)), Some(Object::Number(len))) =
+                    (args.first(), args.get(1))
+                {
+                    if let Object::String(s) = self {
+                        let bytes = s.as_bytes();
+                        let to = *start as usize + *len as usize;
+                        let slice = bytes.get(*start as usize..to).unwrap_or(&[]);
+                        return Object::String(Rc::new(
+                            String::from_utf8_lossy(slice).into_owned(),
+                        ));
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_SPLIT => {
+                if let Some(Object::String(sep)) = args.first() {
+                    if let Object::String(s) = self {
+                        return Object::List(
+                            s.split(sep.as_str())
+                                .map(|p| Object::String(Rc::new(p.to_string())))
+                                .collect(),
+                        );
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_ORD => {
+                if let Some(Object::Number(i)) = args.first() {
+                    if let Object::String(s) = self {
+                        return s
+                            .as_bytes()
+                            .get(*i as usize)
+                            .map_or(Object::Null, |&b| Object::Number(b as f64));
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_TRIM => {
+                if let Object::String(s) = self {
+                    return Object::String(Rc::new(s.trim().to_string()));
+                }
+                Object::Null
+            }
+            id if id == *M_UPPER => {
+                if let Object::String(s) = self {
+                    return Object::String(Rc::new(s.to_uppercase()));
+                }
+                Object::Null
+            }
+            id if id == *M_LOWER => {
+                if let Object::String(s) = self {
+                    return Object::String(Rc::new(s.to_lowercase()));
+                }
+                Object::Null
+            }
+            id if id == *M_TO_NUMBER => {
+                if let Object::String(s) = self {
+                    return s.parse::<f64>().map_or(Object::Null, Object::Number);
+                }
+                Object::Null
+            }
+            id if id == *M_REPLACE => {
+                if let (Some(Object::String(from)), Some(Object::String(to))) =
+                    (args.first(), args.get(1))
+                {
+                    if let Object::String(s) = self {
+                        return Object::String(Rc::new(s.replace(from.as_str(), to.as_str())));
+                    }
+                }
+                Object::Null
+            }
+            _ => Object::Null,
+        }
+    }
+
     pub fn push(&mut self, obj: Object) {
         match self {
             Object::List(ref mut list) => {
@@ -272,6 +400,8 @@ impl PartialEq for Object {
             ) => n1 == n2 && ns1 == ns2,
             (Object::Null, Object::Null) => true,
             (Object::Invalid, Object::Invalid) => true,
+            (Object::Break, Object::Break) => true,
+            (Object::Continue, Object::Continue) => true,
             _ => false,
         }
     }
@@ -318,6 +448,8 @@ impl fmt::Display for Object {
             Object::NameSpace { name, .. } => write!(f, "@{}", resolve(*name)),
             Object::Null => write!(f, "null"),
             Object::Invalid => write!(f, "invalid"),
+            Object::Break => write!(f, "break"),
+            Object::Continue => write!(f, "continue"),
         }
     }
 }

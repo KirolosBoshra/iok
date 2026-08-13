@@ -16,6 +16,8 @@ lazy_static! {
         map.insert("fn", TokenType::Fn);
         map.insert("struct", TokenType::Struct);
         map.insert("ret", TokenType::Ret);
+        map.insert("break", TokenType::Break);
+        map.insert("continue", TokenType::Continue);
         map.insert("true", TokenType::Bool(true));
         map.insert("false", TokenType::Bool(false));
         map.insert("null", TokenType::Null);
@@ -74,6 +76,8 @@ pub enum TokenType {
     For,
     Fn,
     Ret,
+    Break,
+    Continue,
     Struct,
     Import,
     As,
