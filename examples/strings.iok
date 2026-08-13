@@ -1,0 +1,84 @@
+// IOk string tour - every string method and function, one demo each
+// Run: ./target/release/iok --std ./std/ ./examples/strings.iok
+
+import std::io
+
+let s = "Hello, IOk!"
+
+// basics: length and indexing
+io::println("--- basics")
+io::println("len() -> " + s.len())       // 11 (byte length)
+io::println("s[0] -> " + s[0])           // H
+io::println("s[7] -> " + s[7])           // I
+io::println("s[99] -> " + s[99])         // null (out of range)
+io::println("len() -> " + "héllo".len()) // 6 bytes, not 5
+
+// slicing
+io::println("--- substr")
+io::println("substr(0, 5) -> " + s.substr(0, 5))   // Hello
+io::println("substr(7, 3) -> " + s.substr(7, 3))   // IOk
+io::println("substr(50, 3) -> " + s.substr(50, 3)) // out of bounds -> empty
+
+// splitting and joining
+io::println("--- split / join")
+let parts = "a,b,c".split(",")
+io::println("split(\",\") -> " + parts)                      // [a, b, c]
+io::println("parts[1] -> " + parts[1])                       // b
+io::println("join(\"-\") -> " + ["a", "b", "c"].join("-"))   // a-b-c
+
+// characters
+io::println("--- ord / chr")
+io::println("ord(0) -> " + "A".ord(0))   // 65
+io::println("ord(1) -> " + "ABC".ord(1)) // 66
+io::println("chr(65) -> " + chr(65))     // A
+let alphabet = ""
+for i -> 65..91 {
+  alphabet += chr(i)
+}
+io::println("loop chr -> " + alphabet)   // ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+// case and whitespace
+io::println("--- case / trim")
+io::println("to_upper() -> " + "aBc".to_upper())                    // ABC
+io::println("to_lower() -> " + "aBc".to_lower())                    // abc
+io::println("trim() -> [" + "  x  ".trim() + "]")                   // [x]
+
+// conversion
+io::println("--- to_number")
+io::println("to_number() -> " + "42".to_number())   // 42
+io::println("to_number() -> " + "3.5".to_number())  // 3.5
+io::println("to_number() -> " + "abc".to_number())  // null
+io::println("to_number() -> " + ("2" + "1").to_number())            // 21
+
+// editing
+io::println("--- edit")
+io::println("replace() -> " + "a&b<c".replace("&", "&amp;").replace("<", "&lt;"))  // a&amp;b&lt;c
+let t = "abcd"
+t.push("e")
+io::println("push() -> " + t)         // abcde
+io::println("pop() -> " + t.pop())    // e
+io::println("after pop -> " + t)      // abcd
+let m = "hello"
+m[0] = "H"
+io::println("m[0] = \"H\" -> " + m)   // Hello
+io::println("repeat -> " + "=" * 8)   // ========
+io::println("concat -> " + "n=" + 7)  // n=7 (number + string)
+
+// search
+io::println("--- includes")
+io::println("includes(\"ell\") -> " + "hello".includes("ell")) // true
+io::println("includes(\"z\") -> " + "hello".includes("z"))     // false
+
+// interpolation
+io::println("--- format")
+let name = "IOk"
+let x = 41
+let total = x + 1
+io::println("Hi {name}, {x} + 1 = {total}") // Hi IOk, 41 + 1 = 42
+io::println(io::format("{name} has {total} string methods")) // IOk has 42 string methods
+
+// the same methods work on lists
+io::println("--- same methods on lists")
+let l = [1, 2, 3]
+io::println("l.len() -> " + l.len())    // 3
+io::println("l.join(\",\") -> " + l.join(",")) // 1,2,3
