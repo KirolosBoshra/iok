@@ -49,21 +49,20 @@ if server == null {
                 if file_obj != null {
                     html_content = file_obj.read()
                 }
-                
+
+                let status = "200 OK"
+                if path == "/404" {
+                    status = "404 Not Found"
+                }
+
                 let response = ""
                 if html_content != null {
-                    // Successfully read file - serve with 200 OK
-                    response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" + html_content
+                    // Successfully read file - serve it (404.html gets the 404 status)
+                    response = io::format("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n{html_content}")
                     io::print("File found: " + file_path + "\n")
                 } els {
-                    // File not found - serve 404 page
-                    let not_found_content = read_file("examples/webserver/404.html")
-                    if not_found_content != null {
-                        response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" + not_found_content
-                    } els {
-                        // Fallback 404 if custom page not found
-                        response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body><h1>404 - Page Not Found</h1><p>The page you requested could not be found.</p><p><a href='/'>Back to Home</a></p></body></html>"
-                    }
+                    // File not found - serve fallback 404
+                    response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body><h1>404 - Page Not Found</h1><p>The page you requested could not be found.</p><p><a href='/'>Back to Home</a></p></body></html>"
                     io::print("File not found: " + file_path + "\n")
                 }
                 

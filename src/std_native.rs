@@ -37,10 +37,15 @@ pub fn native_chr(args: Vec<Object>, _: &mut Interpreter) -> Object {
 }
 
 pub fn get_var_from_str(args: Vec<Object>, vm: &mut Interpreter) -> Object {
-    if let Some(Object::String(name)) = args.get(0) {
-        return vm.get_var(&intern(name)).unwrap_or(&mut Object::Null).clone();
-    }
-    Object::Null
+    let Some(Object::String(name)) = args.get(0) else {
+        return Object::Null;
+    };
+    let resolved = if matches!(args.get(1), Some(Object::Bool(true))) {
+        vm.get_var_from_caller_scope(&intern(name))
+    } else {
+        vm.get_var(&intern(name)).map(|v| v.clone())
+    };
+    resolved.unwrap_or(Object::Null)
 }
 
 pub fn open_file(args: Vec<Object>, _: &mut Interpreter) -> Object {

@@ -25,4 +25,4 @@ for i -> 0..(BOARD_CAP - 2) {
     }
 }
 
-io::println(output)
+io::print("{output}\n")

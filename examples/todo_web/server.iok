@@ -199,9 +199,8 @@ fn page(tasks) => {
     if tasks[i].done {
       mark = "[x]"
     }
-    rows += "  <li><span>" + mark + " " + escape(tasks[i].title) + "</span>" +
-      "<a href='/toggle?index=" + i + "'>toggle</a>" +
-      "<a href='/delete?index=" + i + "'>delete</a></li>\n"
+    let t = escape(tasks[i].title)
+    rows += io::format("  <li><span>{mark} {t}</span><a href='/toggle?index={i}'>toggle</a><a href='/delete?index={i}'>delete</a></li>\n")
     i++
   }
   if rows == "" {

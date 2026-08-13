@@ -17,9 +17,15 @@ lazy_static! {
 }
 
 #[derive(Debug)]
+struct ScopeFrame {
+    names: Vec<u32>,
+    is_fn: bool,
+}
+
+#[derive(Debug)]
 pub struct Interpreter {
     vars: FxHashMap<u32, Vec<Object>>,
-    trail: Vec<Vec<u32>>,
+    trail: Vec<ScopeFrame>,
     current_path: String,
     std_path: String,
 }
@@ -85,7 +91,7 @@ impl Interpreter {
 
         Self {
             vars,
-            trail: vec![vec![]],
+            trail: vec![ScopeFrame { names: vec![], is_fn: false }],
             current_path,
             std_path,
         }
@@ -93,13 +99,18 @@ impl Interpreter {
 
     #[inline]
     fn enter_scope(&mut self) {
-        self.trail.push(vec![]);
+        self.trail.push(ScopeFrame { names: vec![], is_fn: false });
+    }
+
+    #[inline]
+    fn enter_fn_scope(&mut self) {
+        self.trail.push(ScopeFrame { names: vec![], is_fn: true });
     }
 
     #[inline]
     fn exit_scope(&mut self) {
         if let Some(bound) = self.trail.pop() {
-            for name in bound {
+            for name in bound.names {
                 if let Some(stack) = self.vars.get_mut(&name) {
                     stack.pop();
                     if stack.is_empty() {
@@ -114,13 +125,27 @@ impl Interpreter {
     fn set_var(&mut self, name: u32, value: Object) {
         if let Some(trail) = self.trail.last_mut() {
             self.vars.entry(name).or_default().push(value);
-            trail.push(name);
+            trail.names.push(name);
         }
     }
 
     #[inline]
     pub fn get_var(&mut self, name: &u32) -> Option<&mut Object> {
         self.vars.get_mut(name).and_then(|stack| stack.last_mut())
+    }
+
+    // Resolve a variable as seen from the caller of the current function,
+    // skipping every binding made inside the running function's scopes.
+    pub fn get_var_from_caller_scope(&mut self, name: &u32) -> Option<Object> {
+        let cutoff = self.trail.iter().rposition(|f| f.is_fn)?;
+        let total: usize = self.trail[..cutoff]
+            .iter()
+            .map(|f| f.names.iter().filter(|n| *n == name).count())
+            .sum();
+        self.vars
+            .get(name)
+            .and_then(|stack| stack.get(total.checked_sub(1)?))
+            .cloned()
     }
 
     #[inline]
@@ -692,7 +717,7 @@ impl Interpreter {
         slf: Option<&Object>,
     ) -> Object {
         if let Object::Fn { args, body, .. } = function {
-            self.enter_scope();
+            self.enter_fn_scope();
             // Bind default arguments and interpret call arguments
             for (i, (arg_name, default_value)) in args.iter().enumerate() {
                 let value = if i < call_args.len() {
@@ -732,7 +757,7 @@ impl Interpreter {
 
     fn call_method(&mut self, function: &Object, call_args: &Vec<Tree>, slf: &mut Object) -> Object {
         if let Object::Fn { args, body, .. } = function {
-            self.enter_scope();
+            self.enter_fn_scope();
             for (i, (arg_name, default_value)) in args.iter().enumerate() {
                 let value = if i < call_args.len() {
                     self.interpret(&call_args[i])
