@@ -1,13 +1,15 @@
 use std::fmt;
+use std::io::BufReader;
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[derive(Clone, Debug)]
 pub struct SocketHandler {
     pub id: usize,
     pub address: String,
     pub port: u16,
-    pub stream: Arc<Mutex<TcpStream>>,
+    pub stream: Arc<Mutex<BufReader<TcpStream>>>,
 }
 
 impl PartialEq for SocketHandler {
@@ -157,8 +159,9 @@ impl Socket {
 impl SocketHandler {
     pub fn new(address: String, port: u16) -> Self {
         let stream = TcpStream::connect(format!("{}:{}", address, port)).unwrap();
-        let arc_stream = Arc::new(Mutex::new(stream));
-        let id = arc_stream.as_ref() as *const Mutex<TcpStream> as usize;
+        stream.set_read_timeout(Some(Duration::from_millis(5000))).ok();
+        let arc_stream = Arc::new(Mutex::new(BufReader::new(stream)));
+        let id = arc_stream.as_ref() as *const Mutex<BufReader<TcpStream>> as usize;
         SocketHandler {
             address,
             port,
@@ -168,8 +171,9 @@ impl SocketHandler {
     }
 
     pub fn from_stream(stream: TcpStream) -> Self {
-        let arc_stream = Arc::new(Mutex::new(stream));
-        let id = arc_stream.as_ref() as *const Mutex<TcpStream> as usize;
+        stream.set_read_timeout(Some(Duration::from_millis(5000))).ok();
+        let arc_stream = Arc::new(Mutex::new(BufReader::new(stream)));
+        let id = arc_stream.as_ref() as *const Mutex<BufReader<TcpStream>> as usize;
         SocketHandler {
             address: "unknown".to_string(),
             port: 0,
@@ -179,17 +183,10 @@ impl SocketHandler {
     }
 
     pub fn read(&self) -> Result<String, std::io::Error> {
-        use std::io::{BufRead, BufReader};
-        use std::time::Duration;
+        use std::io::BufRead;
 
-        let mut stream = self.stream.lock().unwrap();
+        let mut reader = self.stream.lock().unwrap();
 
-        // Set read timeout to 5 seconds
-        stream
-            .set_read_timeout(Some(Duration::from_millis(5000)))
-            .ok();
-
-        let mut reader = BufReader::new(&mut *stream);
         let mut buffer = String::new();
 
         match reader.read_line(&mut buffer) {
@@ -218,17 +215,10 @@ impl SocketHandler {
     }
 
     pub fn read_all(&self) -> Result<String, std::io::Error> {
-        use std::io::{BufReader, Read};
-        use std::time::Duration;
+        use std::io::Read;
 
-        let mut stream = self.stream.lock().unwrap();
+        let mut reader = self.stream.lock().unwrap();
 
-        // Set read timeout
-        stream
-            .set_read_timeout(Some(Duration::from_millis(5000)))
-            .ok();
-
-        let mut reader = BufReader::new(&mut *stream);
         let mut buffer = String::new();
 
         // Read all data until EOF
@@ -251,10 +241,10 @@ impl SocketHandler {
     pub fn read_bytes(&self, len: usize) -> Result<Vec<u8>, std::io::Error> {
         use std::io::Read;
 
-        let mut stream = self.stream.lock().unwrap();
+        let mut reader = self.stream.lock().unwrap();
         let mut buffer = vec![0u8; len];
 
-        match stream.read_exact(&mut buffer) {
+        match reader.read_exact(&mut buffer) {
             Ok(_) => Ok(buffer),
             Err(e) => Err(e),
         }
@@ -263,32 +253,32 @@ impl SocketHandler {
     pub fn write(&self, data: &str) -> Result<(), std::io::Error> {
         use std::io::Write;
 
-        let mut stream = self.stream.lock().unwrap();
-        stream.write_all(data.as_bytes())
+        let mut reader = self.stream.lock().unwrap();
+        reader.get_mut().write_all(data.as_bytes())
     }
 
     pub fn close(&self) -> Result<(), std::io::Error> {
         use std::net::Shutdown;
 
-        let stream = self.stream.lock().unwrap();
-        stream.shutdown(Shutdown::Both)
+        let mut reader = self.stream.lock().unwrap();
+        reader.get_mut().shutdown(Shutdown::Both)
     }
 
     pub fn is_connected(&self) -> bool {
-        self.stream.lock().unwrap().peer_addr().is_ok()
+        self.stream.lock().unwrap().get_ref().peer_addr().is_ok()
     }
 
     pub fn local_addr(&self) -> Result<String, std::io::Error> {
-        let stream = self.stream.lock().unwrap();
-        match stream.local_addr() {
+        let reader = self.stream.lock().unwrap();
+        match reader.get_ref().local_addr() {
             Ok(addr) => Ok(addr.to_string()),
             Err(e) => Err(e),
         }
     }
 
     pub fn peer_addr(&self) -> Result<String, std::io::Error> {
-        let stream = self.stream.lock().unwrap();
-        match stream.peer_addr() {
+        let reader = self.stream.lock().unwrap();
+        match reader.get_ref().peer_addr() {
             Ok(addr) => Ok(addr.to_string()),
             Err(e) => Err(e),
         }

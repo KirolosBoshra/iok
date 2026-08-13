@@ -23,4 +23,5 @@ for i -> 0..(BOARD_CAP - 2) {
     }
 }
 
+// using write instead of io::println for faster printing
 write(output + "\n")

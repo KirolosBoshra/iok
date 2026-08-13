@@ -513,9 +513,9 @@ impl Interpreter {
             }
 
             Tree::MemberAccess { target, member } => {
-                let mut target_object = self.interpret(target);
                 match &**member {
                     Tree::Ident(name) => {
+                        let target_object = self.interpret(target);
                         return target_object
                             .get_field(name)
                             .unwrap_or(&Object::Null)
@@ -523,39 +523,58 @@ impl Interpreter {
                     }
 
                     Tree::FnCall { name, args } => {
-                        if let Object::String(_) | Object::List(_) = &target_object {
-                            match *name {
+                        let on_simple_var = self
+                            .interpret_mut(target)
+                            .is_some_and(|t| matches!(t, Object::String(_) | Object::List(_)));
+                        if on_simple_var {
+                            return match *name {
                                 id if id == *M_LEN => {
-                                    return Object::Number(target_object.get_len() as f64)
+                                    Object::Number(self.interpret_mut(target).unwrap().get_len() as f64)
                                 }
                                 id if id == *M_PUSH => {
-                                    let value = self.interpret(&args[0]);
-                                    let target_mut = self.interpret_mut(target).unwrap();
-                                    if args.len() == 1 {
-                                        target_mut.push(value)
-                                    } else {
+                                    if args.len() != 1 {
                                         println!("Expected 1 arg found {}", args.len());
                                         return Object::Null;
                                     }
+                                    let value = self.interpret(&args[0]);
+                                    self.interpret_mut(target).unwrap().push(value);
+                                    Object::Null
                                 }
-                                id if id == *M_POP => {
-                                    let target_mut = self.interpret_mut(target).unwrap();
-                                    return target_mut.pop();
-                                }
+                                id if id == *M_POP => self.interpret_mut(target).unwrap().pop(),
                                 id if id == *M_INCLUDES => {
                                     if args.len() == 1 {
-                                        let search_string = self.interpret(&args[0]);
-                                        if let Object::String(search) = search_string {
-                                            if let Object::String(ref target) = target_object {
-                                                return Object::Bool(target.contains(&*search));
+                                        if let Object::String(search) = self.interpret(&args[0]) {
+                                            if let Object::String(t) =
+                                                self.interpret_mut(target).unwrap()
+                                            {
+                                                return Object::Bool(t.contains(&*search));
                                             }
                                         }
                                     }
-                                    return Object::Null;
+                                    Object::Null
                                 }
-                                _ => {}
-                            }
-                            return Object::Null;
+                                _ => Object::Null,
+                            };
+                        }
+
+                        let mut target_object = self.interpret(target);
+                        if let Object::String(_) | Object::List(_) = &target_object {
+                            return match *name {
+                                id if id == *M_LEN => {
+                                    Object::Number(target_object.get_len() as f64)
+                                }
+                                id if id == *M_INCLUDES => {
+                                    if args.len() == 1 {
+                                        if let Object::String(search) = self.interpret(&args[0]) {
+                                            if let Object::String(t) = &target_object {
+                                                return Object::Bool(t.contains(&*search));
+                                            }
+                                        }
+                                    }
+                                    Object::Null
+                                }
+                                _ => Object::Null,
+                            };
                         }
 
                         if let Object::Instance { ref struct_def, .. } = &target_object {

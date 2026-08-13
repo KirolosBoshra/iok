@@ -121,9 +121,9 @@ impl Object {
         match self {
             Object::List(list) => list.get(i).cloned().unwrap_or(Object::Null),
             Object::String(s) => s
-                .chars()
-                .nth(i)
-                .map_or(Object::Null, |c| Object::String(Rc::new(c.to_string()))),
+                .as_bytes()
+                .get(i)
+                .map_or(Object::Null, |&b| Object::String(Rc::new((b as char).to_string()))),
             _ => Object::Null,
         }
     }
@@ -295,7 +295,16 @@ impl fmt::Display for Object {
                 name,
                 args,
                 body: _,
-            } => write!(f, "fn {} ({:?})", resolve(*name), args),
+            } => {
+                let args_str: Vec<String> = args
+                    .iter()
+                    .map(|(id, default)| match default {
+                        Object::Null => resolve(*id),
+                        d => format!("{} = {}", resolve(*id), d),
+                    })
+                    .collect();
+                write!(f, "fn {} ({})", resolve(*name), args_str.join(", "))
+            }
             Object::NativeFn { name, .. } => write!(f, "NativeFn<{name}>"),
             Object::StructDef {
                 name,
@@ -334,7 +343,11 @@ impl AddAssign for Object {
                 }
             }
             Object::String(s) => {
-                Rc::make_mut(s).push_str(&rhs.to_string_obj().get_string_value());
+                let s_mut = Rc::make_mut(s);
+                match rhs {
+                    Object::String(r) => s_mut.push_str(&r),
+                    other => s_mut.push_str(&other.to_string_obj().get_string_value()),
+                }
             }
             Object::List(l) => {
                 if let Object::List(mut rl) = rhs {

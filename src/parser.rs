@@ -413,7 +413,7 @@ impl Parser {
         let mut fields = vec![];
         let mut methods = vec![];
 
-        while iter.peek().unwrap().token != TokenType::CloseCurly {
+        while iter.peek().is_some_and(|t| t.token != TokenType::CloseCurly) {
             match iter.peek().unwrap().token {
                 TokenType::Let => {
                     fields.push(self.parse_factor(iter));
@@ -439,14 +439,14 @@ impl Parser {
         iter: &mut Peekable<std::slice::Iter<Token>>,
     ) -> FxHashMap<u32, Tree> {
         let mut map = FxHashMap::default();
-        while iter.peek().unwrap().token != TokenType::CloseCurly {
+        while iter.peek().is_some_and(|t| t.token != TokenType::CloseCurly) {
             if let Some(TokenType::Ident(field_name)) =
                 self.expect_token(iter, TokenType::Ident(String::new()))
             {
                 if self.expect_token(iter, TokenType::Colon).is_some() {
                     map.insert(intern(&field_name), self.parse_expression(iter));
                 }
-                if iter.peek().unwrap().token == TokenType::Comma {
+                if iter.peek().is_some_and(|t| t.token == TokenType::Comma) {
                     iter.next();
                     continue;
                 }
@@ -531,8 +531,8 @@ impl Parser {
                     self.prev_token = it.clone();
                     Tree::Ret(Box::new(self.parse_expression(iter)))
                 }
-                TokenType::OpenParen => match iter.peek().unwrap().token {
-                    TokenType::CloseParen => {
+                TokenType::OpenParen => match iter.peek() {
+                    Some(tok) if tok.token == TokenType::CloseParen => {
                         iter.next();
                         self.prev_token = it.clone();
                         let expr = Tree::Empty;
@@ -540,8 +540,8 @@ impl Parser {
                     }
                     _ => {
                         let expr = self.parse_expression(iter);
-                        match iter.next().unwrap().token {
-                            TokenType::CloseParen => expr,
+                        match iter.next() {
+                            Some(tok) if tok.token == TokenType::CloseParen => expr,
                             _ => {
                                 Logger::error(
                                     "Expected closing parenthesis",
@@ -553,28 +553,35 @@ impl Parser {
                         }
                     }
                 },
-                TokenType::Let => match &iter.next().unwrap().token {
-                    TokenType::Ident(var) => {
-                        let next = *iter.peek().unwrap();
-                        match next.token {
-                            TokenType::Equal => {
-                                self.prev_token = next.clone();
-                                iter.next();
-                                let expr = self.parse_expression(iter);
-                                Tree::Let(intern(var), Box::new(expr))
-                            }
-                            _ => Tree::Let(intern(var), Box::new(Tree::Empty())),
-                        }
-                    }
-                    _ => {
+                TokenType::Let => {
+                    let Some(tok) = iter.next() else {
                         Logger::error(
                             "Expected identifier after 'let'",
                             Some(it.loc),
                             ErrorType::Parsing,
                         );
-                        Tree::Empty()
+                        return Tree::Empty();
+                    };
+                    match &tok.token {
+                        TokenType::Ident(var) => match iter.peek() {
+                            Some(next) if next.token == TokenType::Equal => {
+                                self.prev_token = (*next).clone();
+                                iter.next();
+                                let expr = self.parse_expression(iter);
+                                Tree::Let(intern(var), Box::new(expr))
+                            }
+                            _ => Tree::Let(intern(var), Box::new(Tree::Empty())),
+                        },
+                        _ => {
+                            Logger::error(
+                                "Expected identifier after 'let'",
+                                Some(it.loc),
+                                ErrorType::Parsing,
+                            );
+                            Tree::Empty()
+                        }
                     }
-                },
+                }
                 TokenType::If => {
                     let mut els = vec![];
                     let mut els_ifs = vec![];
@@ -595,33 +602,43 @@ impl Parser {
                     self.prev_token = it.clone();
                     Tree::While { expr, body }
                 }
-                TokenType::For => match &iter.next().unwrap().token {
-                    TokenType::Ident(var) => match &iter.peek().unwrap().token {
-                        TokenType::ThinArrow => {
-                            iter.next();
-                            let expr = Box::new(self.parse_expression(iter));
-                            let body = self.parse_block(iter);
-                            self.prev_token = it.clone();
-                            Tree::For {
-                                var: intern(var),
-                                expr,
-                                body,
-                            }
-                        }
-                        _ => {
-                            Logger::error("Expected ->", Some(it.loc), ErrorType::Parsing);
-                            Tree::Empty()
-                        }
-                    },
-                    _ => {
+                TokenType::For => {
+                    let Some(tok) = iter.next() else {
                         Logger::error(
                             "Expected Var -> Expr..Expr or Var -> List",
                             Some(it.loc),
                             ErrorType::Parsing,
                         );
-                        Tree::Empty()
+                        return Tree::Empty();
+                    };
+                    match &tok.token {
+                        TokenType::Ident(var) => match iter.peek() {
+                            Some(next) if next.token == TokenType::ThinArrow => {
+                                iter.next();
+                                let expr = Box::new(self.parse_expression(iter));
+                                let body = self.parse_block(iter);
+                                self.prev_token = it.clone();
+                                Tree::For {
+                                    var: intern(var),
+                                    expr,
+                                    body,
+                                }
+                            }
+                            _ => {
+                                Logger::error("Expected ->", Some(it.loc), ErrorType::Parsing);
+                                Tree::Empty()
+                            }
+                        },
+                        _ => {
+                            Logger::error(
+                                "Expected Var -> Expr..Expr or Var -> List",
+                                Some(it.loc),
+                                ErrorType::Parsing,
+                            );
+                            Tree::Empty()
+                        }
                     }
-                },
+                }
                 TokenType::Fn => {
                     if let Some(TokenType::Ident(name)) =
                         self.expect_token(iter, TokenType::Ident(String::new()))

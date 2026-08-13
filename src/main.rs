@@ -18,9 +18,12 @@ fn interpret_mode(interpreter: &mut Interpreter) {
         print!(">");
         input.clear();
         io::stdout().flush().unwrap();
-        io::stdin()
+        let n = io::stdin()
             .read_line(&mut input)
             .expect("Failed to read line");
+        if n == 0 {
+            break;
+        }
 
         input = input.trim_end().to_string();
 
