@@ -9,7 +9,10 @@ pub type NativeFn = fn(Vec<Object>, &mut Interpreter) -> Object;
 
 pub fn native_write(args: Vec<Object>, _: &mut Interpreter) -> Object {
     for arg in args {
-        print!("{}", arg);
+        match &arg {
+            Object::String(s) => print!("{s}"),
+            other => print!("{other}"),
+        }
     }
     Object::Null
 }

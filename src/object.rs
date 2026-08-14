@@ -139,10 +139,9 @@ impl Object {
     pub fn get_list_index(&self, i: usize) -> Object {
         match self {
             Object::List(list) => list.get(i).cloned().unwrap_or(Object::Null),
-            Object::String(s) => s
-                .as_bytes()
-                .get(i)
-                .map_or(Object::Null, |&b| Object::String(Rc::new((b as char).to_string()))),
+            Object::String(s) => s.as_bytes().get(i).map_or(Object::Null, |&b| {
+                Object::String(Rc::new((b as char).to_string()))
+            }),
             _ => Object::Null,
         }
     }
@@ -410,7 +409,7 @@ impl PartialEq for Object {
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Object::String(s) => write!(f, "{s}"),
+            Object::String(s) => write!(f, "\"{s}\""),
             Object::Number(n) => write!(f, "{n}"),
             Object::Bool(b) => write!(f, "{b}"),
             Object::List(list) => {
