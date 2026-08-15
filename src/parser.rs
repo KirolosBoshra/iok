@@ -50,6 +50,11 @@ pub enum Tree {
         expr: Box<Tree>,
         body: Vec<Tree>,
     },
+    Match {
+        expr: Box<Tree>,
+        arms: Vec<(Vec<Tree>, Vec<Tree>)>,
+        els: Vec<Tree>,
+    },
     Fn {
         name: u32,
         args: Vec<Tree>,
@@ -415,7 +420,10 @@ impl Parser {
         let mut fields = vec![];
         let mut methods = vec![];
 
-        while iter.peek().is_some_and(|t| t.token != TokenType::CloseCurly) {
+        while iter
+            .peek()
+            .is_some_and(|t| t.token != TokenType::CloseCurly)
+        {
             match iter.peek().unwrap().token {
                 TokenType::Let => {
                     fields.push(self.parse_factor(iter));
@@ -441,7 +449,10 @@ impl Parser {
         iter: &mut Peekable<std::slice::Iter<Token>>,
     ) -> FxHashMap<u32, Tree> {
         let mut map = FxHashMap::default();
-        while iter.peek().is_some_and(|t| t.token != TokenType::CloseCurly) {
+        while iter
+            .peek()
+            .is_some_and(|t| t.token != TokenType::CloseCurly)
+        {
             if let Some(TokenType::Ident(field_name)) =
                 self.expect_token(iter, TokenType::Ident(String::new()))
             {
@@ -684,6 +695,57 @@ impl Parser {
                         Logger::error("Expected Struct Name", Some(it.loc), ErrorType::Parsing);
                     }
                     Tree::Empty()
+                }
+
+                TokenType::Match => {
+                    let expr = Box::new(self.parse_expression(iter));
+
+                    if self.expect_token(iter, TokenType::OpenCurly).is_none() {
+                        return Tree::Empty();
+                    }
+
+                    let mut arms: Vec<(Vec<Tree>, Vec<Tree>)> = vec![];
+                    let mut els: Vec<Tree> = vec![];
+
+                    while let Some(peek) = iter.peek() {
+                        let arm_loc = peek.loc;
+                        if peek.token == TokenType::CloseCurly {
+                            iter.next();
+                            break;
+                        }
+                        let mut patterns = vec![self.parse_expression(iter)];
+                        while iter.peek().is_some_and(|t| t.token == TokenType::Comma) {
+                            iter.next();
+                            patterns.push(self.parse_expression(iter));
+                        }
+                        let mut body = vec![];
+                        if self.expect_token(iter, TokenType::FatArrow).is_none() {
+                            break;
+                        }
+                        if let Some(next) = iter.peek() {
+                            match next.token {
+                                TokenType::OpenCurly => body = self.parse_block(iter),
+                                _ => body.push(self.parse_expression(iter)),
+                            }
+                        }
+                        if patterns
+                            .iter()
+                            .any(|p| matches!(p, Tree::Ident(id) if *id == intern("_")))
+                        {
+                            if !els.is_empty() {
+                                Logger::error(
+                                    "Duplicate wildcard arm",
+                                    Some(arm_loc),
+                                    ErrorType::Parsing,
+                                );
+                            }
+                            els = body;
+                        } else {
+                            arms.push((patterns, body));
+                        }
+                    }
+                    self.prev_token = it.clone();
+                    Tree::Match { expr, arms, els }
                 }
 
                 TokenType::Import => {

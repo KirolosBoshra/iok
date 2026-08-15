@@ -1,0 +1,57 @@
+import std::io
+
+fn count() => {
+    write("count-called ")
+    ret 6
+}
+
+match count() {
+    1 => write("one")
+    2 => write("two")
+    4..9 => write("range-hit")
+    _ => write("wildcard")
+}
+io::println("")
+
+let s = "hello"
+match s {
+    "hi", "bye" => write("greeting")
+    "hello" => write("string-hit")
+    _ => write("no")
+}
+io::println("")
+
+let n = null
+match n {
+    null => write("null-hit")
+    _ => write("no")
+}
+io::println("")
+
+let m = 42
+match m {
+    1 => write("one")
+    2 => write("two")
+}
+write("fell-through")
+io::println("")
+
+fn pick(v) => {
+    match v {
+        1 => ret "low"
+        5..10 => ret "mid"
+        _ => ret "high"
+    }
+}
+write(pick(7))
+io::println("")
+
+for i -> 0..6 {
+    match i {
+        2 => continue
+        4 => break
+        _ => {}
+    }
+    write(i)
+}
+io::println("")

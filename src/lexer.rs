@@ -13,6 +13,7 @@ lazy_static! {
         map.insert("elsif", TokenType::ElsIf);
         map.insert("while", TokenType::While);
         map.insert("for", TokenType::For);
+        map.insert("match", TokenType::Match);
         map.insert("fn", TokenType::Fn);
         map.insert("struct", TokenType::Struct);
         map.insert("ret", TokenType::Ret);
@@ -74,6 +75,7 @@ pub enum TokenType {
     ElsIf,
     While,
     For,
+    Match,
     Fn,
     Ret,
     Break,

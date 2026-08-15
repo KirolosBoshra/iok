@@ -27,17 +27,13 @@ if server == null {
             if request != "" {
                 io::print("Request: " + request + "\n")
                 
-                // Parse path using .includes() method
+                // Parse path with match
                 let path = "/404"
-                
-                if request.includes("GET /hello ") {
-                    path = "/hello"
-                } elsif request.includes("GET /time ") {
-                    path = "/time"
-                } elsif request.includes("GET /about ") {
-                    path = "/about"
-                } elsif request.includes("GET / ") {
-                    path = "/index"
+                let request_path = request.split(" ")[1]
+
+                match request_path {
+                    "/hello", "/time", "/about" => path = request_path
+                    "/" => path = "/index"
                 }
                 
                 io::print("Path: " + path + "\n")

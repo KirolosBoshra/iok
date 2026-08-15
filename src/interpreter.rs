@@ -61,18 +61,30 @@ impl Interpreter {
         register_native!(base_scope, "write", std_native::native_write);
         register_native!(base_scope, "exit", std_native::native_exit);
         register_native!(base_scope, "chr", std_native::native_chr);
-        register_native!(base_scope, "__get_var_from_str", std_native::get_var_from_str);
+        register_native!(
+            base_scope,
+            "__get_var_from_str",
+            std_native::get_var_from_str
+        );
         register_native!(base_scope, "__open_file", std_native::open_file);
         register_native!(base_scope, "__read_file", std_native::read_file);
         register_native!(base_scope, "__read_file_range", std_native::read_range);
         register_native!(base_scope, "__write_file", std_native::write_file);
-        register_native!(base_scope, "__write_file_range", std_native::write_file_range);
+        register_native!(
+            base_scope,
+            "__write_file_range",
+            std_native::write_file_range
+        );
         register_native!(base_scope, "__create_file", std_native::create_file);
         register_native!(base_scope, "__socket_connect", std_native::socket_connect);
         register_native!(base_scope, "__socket_bind", std_native::socket_bind);
         register_native!(base_scope, "__socket_accept", std_native::socket_accept);
         register_native!(base_scope, "__socket_read", std_native::socket_read);
-        register_native!(base_scope, "__socket_read_bytes", std_native::socket_read_bytes);
+        register_native!(
+            base_scope,
+            "__socket_read_bytes",
+            std_native::socket_read_bytes
+        );
         register_native!(base_scope, "__socket_write", std_native::socket_write);
         register_native!(base_scope, "__socket_close", std_native::socket_close);
         register_native!(
@@ -80,8 +92,16 @@ impl Interpreter {
             "__socket_is_connected",
             std_native::socket_is_connected
         );
-        register_native!(base_scope, "__socket_local_addr", std_native::socket_local_addr);
-        register_native!(base_scope, "__socket_peer_addr", std_native::socket_peer_addr);
+        register_native!(
+            base_scope,
+            "__socket_local_addr",
+            std_native::socket_local_addr
+        );
+        register_native!(
+            base_scope,
+            "__socket_peer_addr",
+            std_native::socket_peer_addr
+        );
         register_native!(base_scope, "__socket_read_all", std_native::socket_read_all);
 
         let vars = base_scope
@@ -91,7 +111,10 @@ impl Interpreter {
 
         Self {
             vars,
-            trail: vec![ScopeFrame { names: vec![], is_fn: false }],
+            trail: vec![ScopeFrame {
+                names: vec![],
+                is_fn: false,
+            }],
             current_path,
             std_path,
         }
@@ -99,12 +122,18 @@ impl Interpreter {
 
     #[inline]
     fn enter_scope(&mut self) {
-        self.trail.push(ScopeFrame { names: vec![], is_fn: false });
+        self.trail.push(ScopeFrame {
+            names: vec![],
+            is_fn: false,
+        });
     }
 
     #[inline]
     fn enter_fn_scope(&mut self) {
-        self.trail.push(ScopeFrame { names: vec![], is_fn: true });
+        self.trail.push(ScopeFrame {
+            names: vec![],
+            is_fn: true,
+        });
     }
 
     #[inline]
@@ -427,6 +456,22 @@ impl Interpreter {
                 result
             }
 
+            Tree::Match { expr, arms, els } => {
+                let value = self.interpret(expr);
+                self.enter_scope();
+                let result = arms
+                    .iter()
+                    .find_map(|(patterns, body)| {
+                        patterns
+                            .iter()
+                            .any(|p| self.pattern_matches(p, &value))
+                            .then(|| self.eval_block(body))
+                    })
+                    .unwrap_or_else(|| self.eval_block(els));
+                self.exit_scope();
+                result
+            }
+
             Tree::While { expr, body } => {
                 self.enter_scope();
 
@@ -578,8 +623,7 @@ impl Interpreter {
                             if let Object::StructDef { methods, .. } = &**struct_def {
                                 let methods = methods.clone();
                                 if let Some(method) = methods.get(name) {
-                                    let result =
-                                        self.call_method(method, args, &mut target_object);
+                                    let result = self.call_method(method, args, &mut target_object);
                                     if let Some(slot) = self.interpret_mut(target) {
                                         *slot = target_object;
                                     }
@@ -673,6 +717,24 @@ impl Interpreter {
         }
     }
 
+    fn pattern_matches(&mut self, pattern: &Tree, value: &Object) -> bool {
+        match pattern {
+            Tree::Number(n) => value == &Object::Number(*n),
+            Tree::String(s) => value == &Object::String(Rc::clone(s)),
+            Tree::Bool(b) => value == &Object::Bool(*b),
+            Tree::Empty() => value == &Object::Null,
+            Tree::Range(s, e) => {
+                let (Object::Number(start), Object::Number(end)) =
+                    (self.interpret(s), self.interpret(e))
+                else {
+                    return false;
+                };
+                matches!(value, Object::Number(n) if *n >= start && *n < end)
+            }
+            _ => false,
+        }
+    }
+
     // A Helper Method to mut Objects
     #[inline]
     fn interpret_mut(&mut self, tree: &Tree) -> Option<&mut Object> {
@@ -755,7 +817,12 @@ impl Interpreter {
         Object::Null
     }
 
-    fn call_method(&mut self, function: &Object, call_args: &Vec<Tree>, slf: &mut Object) -> Object {
+    fn call_method(
+        &mut self,
+        function: &Object,
+        call_args: &Vec<Tree>,
+        slf: &mut Object,
+    ) -> Object {
         if let Object::Fn { args, body, .. } = function {
             self.enter_fn_scope();
             for (i, (arg_name, default_value)) in args.iter().enumerate() {

@@ -62,12 +62,9 @@ fn load_tasks() => {
   let off = 0
   while off + RECORD <= content.len() {
     let flag = content[off + TITLE_W + 1]
-    if flag == "1" {
-      tasks.push(Task::new(title_at(content, off), true))
-    } els {
-      if flag == "0" {
-        tasks.push(Task::new(title_at(content, off)))
-      }
+    match flag {
+      "1" => tasks.push(Task::new(title_at(content, off), true))
+      "0" => tasks.push(Task::new(title_at(content, off)))
     }
     off += RECORD
   }
@@ -107,16 +104,12 @@ fn remove_at(tasks, idx) => {
 
 fn hex_digit(c) => {
   let d = c.ord(0)
-  if d >= 48 && d <= 57 {
-    ret d - 48
+  match d {
+    48..58  => ret d - 48
+    65..71  => ret d - 55
+    97..103 => ret d - 87
+    _       => ret -1
   }
-  if d >= 65 && d <= 70 {
-    ret d - 55
-  }
-  if d >= 97 && d <= 102 {
-    ret d - 87
-  }
-  ret -1
 }
 
 fn decode(s) => {
@@ -124,22 +117,26 @@ fn decode(s) => {
   let out = ""
   let i = 0
   while i < s.len() {
-    if s[i] == "+" {
-      out += " "
-      i++
-    } elsif s[i] == "%" {
-      let hi = hex_digit(s.substr(i + 1, 1))
-      let lo = hex_digit(s.substr(i + 2, 1))
-      if hi >= 0 && lo >= 0 {
-        out += chr(hi * 16 + lo)
-        i += 3
-      } els {
+    match s[i] {
+      "+" => {
+        out += " "
+        i++
+      }
+      "%" => {
+        let hi = hex_digit(s.substr(i + 1, 1))
+        let lo = hex_digit(s.substr(i + 2, 1))
+        if hi >= 0 && lo >= 0 {
+          out += chr(hi * 16 + lo)
+          i += 3
+        } els {
+          out += s[i]
+          i++
+        }
+      }
+      _ => {
         out += s[i]
         i++
       }
-    } els {
-      out += s[i]
-      i++
     }
   }
   ret out
