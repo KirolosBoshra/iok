@@ -39,6 +39,15 @@ pub fn native_chr(args: Vec<Object>, _: &mut Interpreter) -> Object {
     Object::Null
 }
 
+pub fn native_readline(_args: Vec<Object>, _: &mut Interpreter) -> Object {
+    let mut line = String::new();
+    match std::io::stdin().read_line(&mut line) {
+        Ok(0) => Object::Null,
+        Ok(_) => Object::String(Rc::new(line.trim_end().to_string())),
+        Err(_) => Object::Null,
+    }
+}
+
 pub fn native_eval(args: Vec<Object>, vm: &mut Interpreter) -> Object {
     if let Some(Object::String(code)) = args.first() {
         return vm.eval(code);

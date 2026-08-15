@@ -19,3 +19,10 @@ fn print(str) => {
 }
 
 fn println(str) => print(str+"\n")
+
+fn input(prompt="") => {
+  if prompt != "" {
+    write(prompt)
+  }
+  ret readline()
+}

@@ -62,6 +62,7 @@ impl Interpreter {
         register_native!(base_scope, "exit", std_native::native_exit);
         register_native!(base_scope, "chr", std_native::native_chr);
         register_native!(base_scope, "eval", std_native::native_eval);
+        register_native!(base_scope, "readline", std_native::native_readline);
         register_native!(
             base_scope,
             "__get_var_from_str",
