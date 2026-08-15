@@ -39,7 +39,9 @@ pub enum TokenType {
     Minus,
     DMinus,
     Multiply,
+    DMultiply,
     Divide,
+    Percent,
     Equal,
     EquEqu,
     Bang,
@@ -271,11 +273,20 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '*' => {
-                    tokens.push(Token {
-                        token: TokenType::Multiply,
-                        loc: self.curr_loc,
-                    });
                     self.next();
+                    match self.iter.peek() {
+                        Some('*') => {
+                            tokens.push(Token {
+                                token: TokenType::DMultiply,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        }
+                        _ => tokens.push(Token {
+                            token: TokenType::Multiply,
+                            loc: self.curr_loc,
+                        }),
+                    }
                 }
                 '/' => {
                     self.next();
@@ -289,6 +300,13 @@ impl<'a> Lexer<'a> {
                             loc: self.curr_loc,
                         });
                     }
+                }
+                '%' => {
+                    tokens.push(Token {
+                        token: TokenType::Percent,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
                 '=' => {
                     self.next();

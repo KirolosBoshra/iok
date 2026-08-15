@@ -219,14 +219,19 @@ impl Parser {
     }
 
     fn parse_term(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
-        let mut left = self.parse_factor(iter);
+        let mut left = self.parse_power(iter);
 
         while let Some(op) = iter.peek().cloned() {
             match op.token {
-                TokenType::Multiply | TokenType::Divide => {
+                TokenType::Multiply | TokenType::Divide | TokenType::Percent => {
                     iter.next();
-                    let right = self.parse_factor(iter);
+                    let right = self.parse_term(iter);
                     left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                }
+                TokenType::DMultiply => {
+                    iter.next();
+                    let right = self.parse_term(iter);
+                    left = Tree::BinOp(Box::new(left), TokenType::DMultiply, Box::new(right));
                 }
                 TokenType::Equal => {
                     iter.next();
@@ -467,6 +472,21 @@ impl Parser {
         }
         iter.next();
         map
+    }
+
+    fn parse_power(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
+        let mut left = self.parse_factor(iter);
+
+        while let Some(op) = iter.peek().cloned() {
+            if op.token != TokenType::DMultiply {
+                break;
+            }
+            iter.next();
+            let right = self.parse_power(iter);
+            left = Tree::BinOp(Box::new(left), TokenType::DMultiply, Box::new(right));
+            self.prev_token = op.clone();
+        }
+        left
     }
 
     fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {

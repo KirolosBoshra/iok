@@ -249,6 +249,14 @@ impl Interpreter {
                 (Number(l), Number(r)) if r != 0.0 => Number(l / r),
                 _ => Invalid,
             },
+            Percent => match (left, right) {
+                (Number(l), Number(r)) if r != 0.0 => Number(l % r),
+                _ => Invalid,
+            },
+            DMultiply => match (left, right) {
+                (Number(l), Number(r)) => Number(l.powf(r)),
+                _ => Invalid,
+            },
             BitAnd => left & right,
             BitOR => left | right,
             Shl => left << right,
