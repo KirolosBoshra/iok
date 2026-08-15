@@ -37,11 +37,17 @@ pub enum TokenType {
     PlusEqu,
     DPlus,
     Minus,
+    MinusEqu,
     DMinus,
     Multiply,
+    MultiplyEqu,
     DMultiply,
+    PowerEqu,
     Divide,
+    DivideEqu,
     Percent,
+    PercentEqu,
+    BitNot,
     Equal,
     EquEqu,
     Bang,
@@ -266,6 +272,13 @@ impl<'a> Lexer<'a> {
                                 loc: self.curr_loc,
                             });
                         }
+                        Some('=') => {
+                            self.next();
+                            tokens.push(Token {
+                                token: TokenType::MinusEqu,
+                                loc: self.curr_loc,
+                            });
+                        }
                         _ => tokens.push(Token {
                             token: TokenType::Minus,
                             loc: self.curr_loc,
@@ -276,11 +289,27 @@ impl<'a> Lexer<'a> {
                     self.next();
                     match self.iter.peek() {
                         Some('*') => {
+                            self.next();
+                            match self.iter.peek() {
+                                Some('=') => {
+                                    self.next();
+                                    tokens.push(Token {
+                                        token: TokenType::PowerEqu,
+                                        loc: self.curr_loc,
+                                    });
+                                }
+                                _ => tokens.push(Token {
+                                    token: TokenType::DMultiply,
+                                    loc: self.curr_loc,
+                                }),
+                            }
+                        }
+                        Some('=') => {
+                            self.next();
                             tokens.push(Token {
-                                token: TokenType::DMultiply,
+                                token: TokenType::MultiplyEqu,
                                 loc: self.curr_loc,
                             });
-                            self.next();
                         }
                         _ => tokens.push(Token {
                             token: TokenType::Multiply,
@@ -294,6 +323,12 @@ impl<'a> Lexer<'a> {
                         while self.iter.peek().is_some() && *self.iter.peek().unwrap() != '\n' {
                             self.next();
                         }
+                    } else if self.iter.peek() == Some(&'=') {
+                        self.next();
+                        tokens.push(Token {
+                            token: TokenType::DivideEqu,
+                            loc: self.curr_loc,
+                        });
                     } else {
                         tokens.push(Token {
                             token: TokenType::Divide,
@@ -302,8 +337,23 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '%' => {
+                    self.next();
+                    if self.iter.peek() == Some(&'=') {
+                        self.next();
+                        tokens.push(Token {
+                            token: TokenType::PercentEqu,
+                            loc: self.curr_loc,
+                        });
+                    } else {
+                        tokens.push(Token {
+                            token: TokenType::Percent,
+                            loc: self.curr_loc,
+                        });
+                    }
+                }
+                '~' => {
                     tokens.push(Token {
-                        token: TokenType::Percent,
+                        token: TokenType::BitNot,
                         loc: self.curr_loc,
                     });
                     self.next();

@@ -239,16 +239,25 @@ impl Parser {
                     left = Tree::Assign(Box::new(left), Box::new(expr));
                 }
 
-                TokenType::PlusEqu => {
+                TokenType::PlusEqu
+                | TokenType::MinusEqu
+                | TokenType::MultiplyEqu
+                | TokenType::DivideEqu
+                | TokenType::PercentEqu
+                | TokenType::PowerEqu => {
                     iter.next();
+                    let op = match op.token {
+                        TokenType::PlusEqu => TokenType::Plus,
+                        TokenType::MinusEqu => TokenType::Minus,
+                        TokenType::MultiplyEqu => TokenType::Multiply,
+                        TokenType::DivideEqu => TokenType::Divide,
+                        TokenType::PercentEqu => TokenType::Percent,
+                        _ => TokenType::DMultiply,
+                    };
                     let right = self.parse_expression(iter);
                     left = Tree::Assign(
                         Box::new(left.clone()),
-                        Box::new(Tree::BinOp(
-                            Box::new(left),
-                            TokenType::Plus,
-                            Box::new(right),
-                        )),
+                        Box::new(Tree::BinOp(Box::new(left), op, Box::new(right))),
                     );
                 }
                 TokenType::OpenSquare => {
@@ -498,6 +507,10 @@ impl Parser {
                 TokenType::Bang => {
                     let expr = self.parse_expression(iter);
                     Tree::CmpOp(Box::new(expr), TokenType::Bang, Box::new(Tree::Empty()))
+                }
+                TokenType::BitNot => {
+                    let expr = self.parse_expression(iter);
+                    Tree::CmpOp(Box::new(expr), TokenType::BitNot, Box::new(Tree::Empty()))
                 }
                 TokenType::Ident(string) => {
                     let ident = intern(string);

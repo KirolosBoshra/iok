@@ -291,6 +291,12 @@ impl Interpreter {
 
             // Logical NOT, AND, OR operations
             TokenType::Bang => return Bool(!left),
+            TokenType::BitNot => {
+                return match left {
+                    Object::Number(n) => Object::Number(!(n as i64) as f64),
+                    _ => Object::Invalid,
+                };
+            }
             TokenType::And => {
                 Bool(left.to_bool_obj().get_bool_value() && right.to_bool_obj().get_bool_value())
             }
