@@ -432,7 +432,7 @@ impl fmt::Display for Object {
                         d => format!("{} = {}", resolve(*id), d),
                     })
                     .collect();
-                write!(f, "fn {} ({})", resolve(*name), args_str.join(", "))
+                write!(f, "fn {}({})", resolve(*name), args_str.join(", "))
             }
             Object::NativeFn { name, .. } => write!(f, "NativeFn<{name}>"),
             Object::StructDef {

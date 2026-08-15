@@ -61,6 +61,7 @@ impl Interpreter {
         register_native!(base_scope, "write", std_native::native_write);
         register_native!(base_scope, "exit", std_native::native_exit);
         register_native!(base_scope, "chr", std_native::native_chr);
+        register_native!(base_scope, "eval", std_native::native_eval);
         register_native!(
             base_scope,
             "__get_var_from_str",
@@ -902,12 +903,26 @@ impl Interpreter {
         file.read_to_string(&mut input).expect("can't read file");
         input = input.trim_end().to_string();
 
+        self.parse_source(&input)
+    }
+
+    fn parse_source(&self, source: &str) -> Vec<Tree> {
+        let input = source.to_string();
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.tokenize();
         let mut parser = Parser::new(tokens);
+        parser.parse_tokens()
+    }
 
-        let parsed_tree = parser.parse_tokens();
-        parsed_tree
+    pub fn eval(&mut self, source: &str) -> Object {
+        let mut result = Object::Null;
+        for tree in self.parse_source(source) {
+            result = self.interpret(&tree);
+            if let Object::Ret(_) | Object::Break | Object::Continue = result {
+                break;
+            }
+        }
+        result
     }
     fn eval_namespace(&self, path: String, parsed_trees: &Vec<Tree>) -> FxHashMap<u32, Object> {
         let mut namespace = FxHashMap::default();

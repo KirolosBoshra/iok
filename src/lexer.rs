@@ -226,42 +226,38 @@ impl<'a> Lexer<'a> {
                 }
                 '+' => {
                     self.next();
-                    if let Some(c) = self.iter.peek() {
-                        match c {
-                            '+' => {
-                                tokens.push(Token {
-                                    token: TokenType::DPlus,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            '=' => {
-                                tokens.push(Token {
-                                    token: TokenType::PlusEqu,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            _ => {
-                                tokens.push(Token {
-                                    token: TokenType::Plus,
-                                    loc: self.curr_loc,
-                                });
-                            }
+                    match self.iter.peek() {
+                        Some('+') => {
+                            tokens.push(Token {
+                                token: TokenType::DPlus,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
                         }
+                        Some('=') => {
+                            tokens.push(Token {
+                                token: TokenType::PlusEqu,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        }
+                        _ => tokens.push(Token {
+                            token: TokenType::Plus,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
                 '-' => {
                     self.next();
-                    match *self.iter.peek().unwrap() {
-                        '-' => {
+                    match self.iter.peek() {
+                        Some('-') => {
                             self.next();
                             tokens.push(Token {
                                 token: TokenType::DMinus,
                                 loc: self.curr_loc,
                             });
                         }
-                        '>' => {
+                        Some('>') => {
                             self.next();
                             tokens.push(Token {
                                 token: TokenType::ThinArrow,
@@ -283,8 +279,8 @@ impl<'a> Lexer<'a> {
                 }
                 '/' => {
                     self.next();
-                    if *self.iter.peek().unwrap() == '/' {
-                        while *self.iter.peek().unwrap() != '\n' {
+                    if self.iter.peek() == Some(&'/') {
+                        while self.iter.peek().is_some() && *self.iter.peek().unwrap() != '\n' {
                             self.next();
                         }
                     } else {
@@ -296,148 +292,136 @@ impl<'a> Lexer<'a> {
                 }
                 '=' => {
                     self.next();
-                    if let Some(c) = self.iter.peek() {
-                        match c {
-                            '=' => {
-                                tokens.push(Token {
-                                    token: TokenType::EquEqu,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            '>' => {
-                                tokens.push(Token {
-                                    token: TokenType::FatArrow,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            _ => {
-                                tokens.push(Token {
-                                    token: TokenType::Equal,
-                                    loc: self.curr_loc,
-                                });
-                            }
+                    match self.iter.peek() {
+                        Some('=') => {
+                            tokens.push(Token {
+                                token: TokenType::EquEqu,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
                         }
+                        Some('>') => {
+                            tokens.push(Token {
+                                token: TokenType::FatArrow,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        }
+                        _ => tokens.push(Token {
+                            token: TokenType::Equal,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
                 '!' => {
                     self.next();
-                    if *self.iter.peek().unwrap_or(&' ') == '=' {
-                        tokens.push(Token {
-                            token: TokenType::NotEqu,
-                            loc: self.curr_loc,
-                        });
-                        self.next();
-                    } else {
-                        tokens.push(Token {
+                    match self.iter.peek() {
+                        Some('=') => {
+                            tokens.push(Token {
+                                token: TokenType::NotEqu,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        }
+                        _ => tokens.push(Token {
                             token: TokenType::Bang,
                             loc: self.curr_loc,
-                        });
+                        }),
                     }
                 }
                 '>' => {
                     self.next();
-                    if let Some(c) = self.iter.peek() {
-                        match c {
-                            '=' => {
-                                tokens.push(Token {
-                                    token: TokenType::GreatEqu,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            '>' => {
-                                tokens.push(Token {
-                                    token: TokenType::Shr,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            _ => {
-                                tokens.push(Token {
-                                    token: TokenType::Greater,
-                                    loc: self.curr_loc,
-                                });
-                            }
+                    match self.iter.peek() {
+                        Some('=') => {
+                            tokens.push(Token {
+                                token: TokenType::GreatEqu,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
                         }
+                        Some('>') => {
+                            tokens.push(Token {
+                                token: TokenType::Shr,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        }
+                        _ => tokens.push(Token {
+                            token: TokenType::Greater,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
 
                 '<' => {
                     self.next();
-                    if let Some(c) = self.iter.peek() {
-                        match c {
-                            '=' => {
-                                tokens.push(Token {
-                                    token: TokenType::LessEqu,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            '<' => {
-                                tokens.push(Token {
-                                    token: TokenType::Shl,
-                                    loc: self.curr_loc,
-                                });
-                                self.next();
-                            }
-                            _ => {
-                                tokens.push(Token {
-                                    token: TokenType::Less,
-                                    loc: self.curr_loc,
-                                });
-                            }
+                    match self.iter.peek() {
+                        Some('=') => {
+                            tokens.push(Token {
+                                token: TokenType::LessEqu,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
                         }
+                        Some('<') => {
+                            tokens.push(Token {
+                                token: TokenType::Shl,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        }
+                        _ => tokens.push(Token {
+                            token: TokenType::Less,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
                 '&' => {
                     self.next();
-                    if let Some(c) = self.iter.peek() {
-                        if *c == '&' {
+                    match self.iter.peek() {
+                        Some('&') => {
                             tokens.push(Token {
                                 token: TokenType::And,
                                 loc: self.curr_loc,
                             });
                             self.next();
-                        } else {
-                            tokens.push(Token {
-                                token: TokenType::BitAnd,
-                                loc: self.curr_loc,
-                            })
                         }
+                        _ => tokens.push(Token {
+                            token: TokenType::BitAnd,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
                 '|' => {
                     self.next();
-                    if let Some(c) = self.iter.peek() {
-                        if *c == '|' {
+                    match self.iter.peek() {
+                        Some('|') => {
                             tokens.push(Token {
                                 token: TokenType::Or,
                                 loc: self.curr_loc,
                             });
                             self.next();
-                        } else {
-                            tokens.push(Token {
-                                token: TokenType::BitOR,
-                                loc: self.curr_loc,
-                            });
                         }
+                        _ => tokens.push(Token {
+                            token: TokenType::BitOR,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
                 '.' => {
                     self.next();
-                    if *self.iter.peek().unwrap_or(&' ') == '.' {
-                        tokens.push(Token {
-                            token: TokenType::DDot,
-                            loc: self.curr_loc,
-                        });
-                        self.next();
-                    } else {
-                        tokens.push(Token {
+                    match self.iter.peek() {
+                        Some('.') => {
+                            tokens.push(Token {
+                                token: TokenType::DDot,
+                                loc: self.curr_loc,
+                            });
+                            self.next();
+                        }
+                        _ => tokens.push(Token {
                             token: TokenType::Dot,
                             loc: self.curr_loc,
-                        });
+                        }),
                     }
                 }
                 ',' => {
@@ -456,19 +440,18 @@ impl<'a> Lexer<'a> {
                 }
                 ':' => {
                     self.next();
-                    if let Some(c) = self.iter.peek() {
-                        if *c == ':' {
+                    match self.iter.peek() {
+                        Some(':') => {
                             tokens.push(Token {
                                 token: TokenType::DColon,
                                 loc: self.curr_loc,
                             });
                             self.next();
-                        } else {
-                            tokens.push(Token {
-                                token: TokenType::Colon,
-                                loc: self.curr_loc,
-                            })
                         }
+                        _ => tokens.push(Token {
+                            token: TokenType::Colon,
+                            loc: self.curr_loc,
+                        }),
                     }
                 }
 

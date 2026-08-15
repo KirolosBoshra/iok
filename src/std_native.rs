@@ -39,6 +39,13 @@ pub fn native_chr(args: Vec<Object>, _: &mut Interpreter) -> Object {
     Object::Null
 }
 
+pub fn native_eval(args: Vec<Object>, vm: &mut Interpreter) -> Object {
+    if let Some(Object::String(code)) = args.first() {
+        return vm.eval(code);
+    }
+    Object::Null
+}
+
 pub fn get_var_from_str(args: Vec<Object>, vm: &mut Interpreter) -> Object {
     let Some(Object::String(name)) = args.get(0) else {
         return Object::Null;
