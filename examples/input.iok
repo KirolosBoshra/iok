@@ -1,0 +1,16 @@
+import std::io
+
+let a = readline()
+io::println("got: " + a)
+
+let b = io::input("Name: ")
+io::println("got: " + b)
+
+while true {
+    let l = readline()
+    if l == null {
+        io::println("EOF")
+        break
+    }
+    io::println("line: " + l)
+}

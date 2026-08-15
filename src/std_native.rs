@@ -3,6 +3,7 @@ use crate::interner::intern;
 use crate::interpreter::Interpreter;
 use crate::object::Object;
 use crate::socket::Socket;
+use std::io::Write;
 use std::rc::Rc;
 
 pub type NativeFn = fn(Vec<Object>, &mut Interpreter) -> Object;
@@ -14,6 +15,7 @@ pub fn native_write(args: Vec<Object>, _: &mut Interpreter) -> Object {
             other => print!("{other}"),
         }
     }
+    std::io::stdout().flush().ok();
     Object::Null
 }
 
