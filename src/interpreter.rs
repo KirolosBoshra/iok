@@ -2,7 +2,7 @@ use crate::interner::{intern, resolve};
 use crate::std_native;
 use crate::{
     lexer::Lexer, lexer::TokenType, logger::ErrorType, logger::Logger, object::Object,
-    parser::Parser, parser::Tree,
+    parser::Node, parser::Parser, parser::Tree,
 };
 use core::iter::Iterator;
 use lazy_static::lazy_static;
@@ -309,8 +309,8 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, tree: &Tree) -> Object {
-        match tree {
+    pub fn interpret(&mut self, node: &Node) -> Object {
+        match &node.tree {
             Tree::Empty() => Object::Null,
             Tree::Number(num) => Object::Number(*num),
             Tree::Bool(b) => Object::Bool(*b),
@@ -371,7 +371,7 @@ impl Interpreter {
                     value_obj = std::mem::take(expr);
                 }
 
-                match &**var {
+                match &var.tree {
                     Tree::Ident(ref name) => {
                         if let Some(existing_value) = self.get_var(name) {
                             if matches!(existing_value, Object::Fn { .. }) {
@@ -401,10 +401,10 @@ impl Interpreter {
             Tree::Fn { name, args, body } => {
                 let args_names: Vec<(u32, Object)> = args
                     .iter()
-                    .filter_map(|arg| match arg {
+                    .filter_map(|arg| match &arg.tree {
                         Tree::Ident(var) => Some((*var, Object::Null)),
                         Tree::Assign(var, expr) => {
-                            if let Tree::Ident(name) = &**var {
+                            if let Tree::Ident(name) = &var.tree {
                                 Some((*name, self.interpret(&expr)))
                             } else {
                                 None
@@ -441,7 +441,7 @@ impl Interpreter {
                 } else {
                     Logger::error(
                         &format!("Undefined function: {}", resolve(*name)),
-                        None,
+                        Some(node.loc),
                         ErrorType::RunTime,
                     );
                     Object::Null
@@ -460,7 +460,7 @@ impl Interpreter {
                 } else {
                     els_ifs
                         .iter()
-                        .find_map(|ei| match ei {
+                        .find_map(|ei| match &ei.tree {
                             Tree::ElsIf { expr, body } if self.interpret(expr).to_bool() => {
                                 Some(self.eval_block(body))
                             }
@@ -553,7 +553,7 @@ impl Interpreter {
                 let mut struct_methods = FxHashMap::default();
 
                 fields.iter().for_each(|field| {
-                    if let Tree::Let(name, value) = field {
+                    if let Tree::Let(name, value) = &field.tree {
                         struct_fields.insert(*name, self.interpret(value));
                     }
                 });
@@ -563,7 +563,7 @@ impl Interpreter {
                         name,
                         args: _,
                         body: _,
-                    } = method
+                    } = &method.tree
                     {
                         struct_methods.insert(*name, self.interpret(method));
                     }
@@ -582,7 +582,11 @@ impl Interpreter {
                 let mut def = match self.get_var(name) {
                     Some(obj) => obj.clone(),
                     None => {
-                        println!("Runtime Error: Undefined struct: {}", resolve(*name));
+                        Logger::error(
+                            &format!("Undefined struct: {}", resolve(*name)),
+                            Some(node.loc),
+                            ErrorType::RunTime,
+                        );
                         return Object::Null;
                     }
                 };
@@ -606,7 +610,7 @@ impl Interpreter {
             }
 
             Tree::MemberAccess { target, member } => {
-                match &**member {
+                match &member.tree {
                     Tree::Ident(name) => {
                         let target_object = self.interpret(target);
                         return target_object
@@ -625,14 +629,14 @@ impl Interpreter {
                             return self
                                 .interpret_mut(target)
                                 .unwrap()
-                                .simple_method(*name, &arg_objs);
+                                .simple_method(*name, &arg_objs, node.loc);
                         }
 
                         let mut target_object = self.interpret(target);
                         if let Object::String(_) | Object::List(_) = &target_object {
                             let arg_objs: Vec<Object> =
                                 args.iter().map(|a| self.interpret(a)).collect();
-                            return target_object.simple_method(*name, &arg_objs);
+                            return target_object.simple_method(*name, &arg_objs, node.loc);
                         }
 
                         if let Object::Instance { ref struct_def, .. } = &target_object {
@@ -677,7 +681,7 @@ impl Interpreter {
             }
 
             Tree::Import { path, alias } => {
-                if let Tree::MemberAccess { .. } = &**path {
+                if let Tree::MemberAccess { .. } = &path.tree {
                     let flat_path = self.flatten_path(path);
                     let root_path = format!("{}/{}.iok", self.std_path, resolve(flat_path[0]));
                     let root_namespace = self.import_file_to_namespace(&root_path);
@@ -733,8 +737,8 @@ impl Interpreter {
         }
     }
 
-    fn pattern_matches(&mut self, pattern: &Tree, value: &Object) -> bool {
-        match pattern {
+    fn pattern_matches(&mut self, pattern: &Node, value: &Object) -> bool {
+        match &pattern.tree {
             Tree::Number(n) => value == &Object::Number(*n),
             Tree::String(s) => value == &Object::String(Rc::clone(s)),
             Tree::Bool(b) => value == &Object::Bool(*b),
@@ -753,8 +757,8 @@ impl Interpreter {
 
     // A Helper Method to mut Objects
     #[inline]
-    fn interpret_mut(&mut self, tree: &Tree) -> Option<&mut Object> {
-        match tree {
+    fn interpret_mut(&mut self, node: &Node) -> Option<&mut Object> {
+        match &node.tree {
             Tree::Ident(name) => self.get_var(name), // Return a mutable reference to the variable
             Tree::ListCall(list, index) => {
                 let index_num = self.interpret(index).to_f64() as usize;
@@ -767,7 +771,7 @@ impl Interpreter {
             }
             Tree::MemberAccess { target, member } => {
                 if let Some(target_obj) = self.interpret_mut(target) {
-                    if let Tree::Ident(field_name) = &**member {
+                    if let Tree::Ident(field_name) = &member.tree {
                         return target_obj.get_field_mut(field_name);
                     }
                 }
@@ -778,7 +782,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_block(&mut self, body: &[Tree]) -> Object {
+    fn eval_block(&mut self, body: &[Node]) -> Object {
         let mut result = Object::Null;
         for stmt in body {
             result = self.interpret(stmt);
@@ -791,7 +795,7 @@ impl Interpreter {
     pub fn call_function(
         &mut self,
         function: &Object,
-        call_args: &Vec<Tree>,
+        call_args: &Vec<Node>,
         slf: Option<&Object>,
     ) -> Object {
         if let Object::Fn { args, body, .. } = function {
@@ -836,7 +840,7 @@ impl Interpreter {
     fn call_method(
         &mut self,
         function: &Object,
-        call_args: &Vec<Tree>,
+        call_args: &Vec<Node>,
         slf: &mut Object,
     ) -> Object {
         if let Object::Fn { args, body, .. } = function {
@@ -864,8 +868,8 @@ impl Interpreter {
         Object::Null
     }
 
-    fn resolve_import_path(&self, path: &Tree) -> String {
-        let mut path_str = match path {
+    fn resolve_import_path(&self, path: &Node) -> String {
+        let mut path_str = match &path.tree {
             Tree::String(p) => self.current_path.to_string() + "\\" + &**p,
             Tree::Ident(lib) => self.std_path.to_string() + "/" + &resolve(*lib) + ".iok",
             _ => panic!("Expected Path or Lib name"),
@@ -877,12 +881,12 @@ impl Interpreter {
         path_str
     }
 
-    fn flatten_path(&self, path: &Tree) -> Vec<u32> {
-        match path {
+    fn flatten_path(&self, path: &Node) -> Vec<u32> {
+        match &path.tree {
             Tree::Ident(name) => vec![*name],
             Tree::MemberAccess { target, member } => {
                 let mut parts = self.flatten_path(target);
-                if let Tree::Ident(m) = &**member {
+                if let Tree::Ident(m) = &member.tree {
                     parts.push(*m);
                     parts
                 } else {
@@ -893,7 +897,7 @@ impl Interpreter {
         }
     }
     fn import_file_to_namespace(&self, file_path: &String) -> FxHashMap<u32, Object> {
-        let parsed_trees = self.generate_ast(file_path);
+        let (parsed_trees, input) = self.generate_ast(file_path);
         let parent_path = Path::new(file_path)
             .canonicalize()
             .expect("Can't get path")
@@ -903,7 +907,10 @@ impl Interpreter {
             .unwrap()
             .to_string();
 
-        self.eval_namespace(parent_path, &parsed_trees)
+        Logger::push_source(file_path, &input);
+        let namespace = self.eval_namespace(parent_path, &parsed_trees);
+        Logger::pop_source();
+        namespace
     }
 
     fn import_namespace_into_scope(&mut self, namespace: FxHashMap<u32, Object>) {
@@ -911,17 +918,17 @@ impl Interpreter {
             self.set_var(name, value);
         }
     }
-    fn generate_ast(&self, file_path: &String) -> Vec<Tree> {
+    fn generate_ast(&self, file_path: &String) -> (Vec<Node>, String) {
         let mut input = String::new();
 
         let mut file = File::open(&file_path).expect("Can't locate lib");
         file.read_to_string(&mut input).expect("can't read file");
         input = input.trim_end().to_string();
 
-        self.parse_source(&input)
+        (self.parse_source(&input), input)
     }
 
-    fn parse_source(&self, source: &str) -> Vec<Tree> {
+    fn parse_source(&self, source: &str) -> Vec<Node> {
         let input = source.to_string();
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.tokenize();
@@ -931,15 +938,17 @@ impl Interpreter {
 
     pub fn eval(&mut self, source: &str) -> Object {
         let mut result = Object::Null;
+        Logger::push_source("eval", source);
         for tree in self.parse_source(source) {
             result = self.interpret(&tree);
             if let Object::Ret(_) | Object::Break | Object::Continue = result {
                 break;
             }
         }
+        Logger::pop_source();
         result
     }
-    fn eval_namespace(&self, path: String, parsed_trees: &Vec<Tree>) -> FxHashMap<u32, Object> {
+    fn eval_namespace(&self, path: String, parsed_trees: &Vec<Node>) -> FxHashMap<u32, Object> {
         let mut namespace = FxHashMap::default();
         let mut mod_interpreter = Interpreter::new(path, Option::Some(self.std_path.clone()));
         parsed_trees.iter().for_each(|ast| {

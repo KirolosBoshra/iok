@@ -6,71 +6,77 @@ use std::iter::Peekable;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Node {
+    pub tree: Tree,
+    pub loc: Loc,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Tree {
     Number(f64),
     Bool(bool),
     String(Rc<String>),
-    List(Vec<Tree>),
+    List(Vec<Node>),
     Ident(u32),
     Empty(),
-    ListCall(Box<Tree>, Box<Tree>),
+    ListCall(Box<Node>, Box<Node>),
     FnCall {
         name: u32,
-        args: Vec<Tree>,
+        args: Vec<Node>,
     },
     MemberAccess {
-        target: Box<Tree>, // variable
-        member: Box<Tree>, // field or method()
+        target: Box<Node>, // variable
+        member: Box<Node>, // field or method()
     },
 
-    Ret(Box<Tree>),
+    Ret(Box<Node>),
     Break,
     Continue,
-    BinOp(Box<Tree>, TokenType, Box<Tree>),
-    CmpOp(Box<Tree>, TokenType, Box<Tree>),
-    Range(Box<Tree>, Box<Tree>),
-    Let(u32, Box<Tree>),
-    Assign(Box<Tree>, Box<Tree>),
+    BinOp(Box<Node>, TokenType, Box<Node>),
+    CmpOp(Box<Node>, TokenType, Box<Node>),
+    Range(Box<Node>, Box<Node>),
+    Let(u32, Box<Node>),
+    Assign(Box<Node>, Box<Node>),
     If {
-        expr: Box<Tree>,
-        body: Vec<Tree>,
-        els: Vec<Tree>,
-        els_ifs: Vec<Tree>,
+        expr: Box<Node>,
+        body: Vec<Node>,
+        els: Vec<Node>,
+        els_ifs: Vec<Node>,
     },
     ElsIf {
-        expr: Box<Tree>,
-        body: Vec<Tree>,
+        expr: Box<Node>,
+        body: Vec<Node>,
     },
     While {
-        expr: Box<Tree>,
-        body: Vec<Tree>,
+        expr: Box<Node>,
+        body: Vec<Node>,
     },
     For {
         var: u32,
-        expr: Box<Tree>,
-        body: Vec<Tree>,
+        expr: Box<Node>,
+        body: Vec<Node>,
     },
     Match {
-        expr: Box<Tree>,
-        arms: Vec<(Vec<Tree>, Vec<Tree>)>,
-        els: Vec<Tree>,
+        expr: Box<Node>,
+        arms: Vec<(Vec<Node>, Vec<Node>)>,
+        els: Vec<Node>,
     },
     Fn {
         name: u32,
-        args: Vec<Tree>,
-        body: Vec<Tree>,
+        args: Vec<Node>,
+        body: Vec<Node>,
     },
     StructDef {
         name: u32,
-        fields: Vec<Tree>,
-        methods: Vec<Tree>,
+        fields: Vec<Node>,
+        methods: Vec<Node>,
     },
     StructInit {
         name: u32,
-        fields: FxHashMap<u32, Tree>,
+        fields: FxHashMap<u32, Node>,
     },
     Import {
-        path: Box<Tree>,
+        path: Box<Node>,
         alias: Option<u32>,
     },
 }
@@ -90,7 +96,7 @@ impl Parser {
             },
         }
     }
-    pub fn parse_tokens(&mut self) -> Vec<Tree> {
+    pub fn parse_tokens(&mut self) -> Vec<Node> {
         let tokens_clone = self.tokens.clone();
         let mut iter: Peekable<std::slice::Iter<'_, Token>> = tokens_clone.iter().peekable();
         let mut trees = Vec::new();
@@ -105,7 +111,7 @@ impl Parser {
     fn parse_expression(
         &mut self,
         iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
-    ) -> Tree {
+    ) -> Node {
         let mut left = self.parse_or(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -113,23 +119,43 @@ impl Parser {
                 TokenType::DDot => {
                     iter.next();
                     let right = self.parse_expression(iter);
-                    left = Tree::Range(Box::new(left), Box::new(right));
+                    left = Node {
+                        tree: Tree::Range(Box::new(left), Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
                 TokenType::DPlus | TokenType::DMinus => {
                     iter.next();
+                    let op_loc = op.loc;
                     let op = match op.token {
                         TokenType::DPlus => TokenType::Plus,
                         _ => TokenType::Minus,
                     };
-                    left = Tree::Assign(
-                        Box::new(left.clone()),
-                        Box::new(Tree::BinOp(Box::new(left), op, Box::new(Tree::Number(1.0)))),
-                    );
+                    left = Node {
+                        tree: Tree::Assign(
+                            Box::new(left.clone()),
+                            Box::new(Node {
+                                tree: Tree::BinOp(
+                                    Box::new(left),
+                                    op,
+                                    Box::new(Node {
+                                        tree: Tree::Number(1.0),
+                                        loc: op_loc,
+                                    }),
+                                ),
+                                loc: op_loc,
+                            }),
+                        ),
+                        loc: op_loc,
+                    };
                 }
                 TokenType::BitAnd | TokenType::BitOR | TokenType::Shl | TokenType::Shr => {
                     iter.next();
                     let right = self.parse_expression(iter);
-                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                    left = Node {
+                        tree: Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
 
                 _ => break,
@@ -140,7 +166,7 @@ impl Parser {
         left
     }
 
-    fn parse_or(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_or(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
         let mut left = self.parse_and(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -148,7 +174,10 @@ impl Parser {
                 TokenType::Or => {
                     iter.next();
                     let right = self.parse_and(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                    left = Node {
+                        tree: Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
                 _ => break,
             }
@@ -158,7 +187,7 @@ impl Parser {
         left
     }
 
-    fn parse_and(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_and(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
         let mut left = self.parse_cmp(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -166,7 +195,10 @@ impl Parser {
                 TokenType::And => {
                     iter.next();
                     let right = self.parse_cmp(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                    left = Node {
+                        tree: Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
                 _ => break,
             }
@@ -176,7 +208,7 @@ impl Parser {
         left
     }
 
-    fn parse_cmp(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_cmp(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
         let mut left = self.parse_additive(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -189,7 +221,10 @@ impl Parser {
                 | TokenType::LessEqu => {
                     iter.next();
                     let right = self.parse_additive(iter);
-                    left = Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right));
+                    left = Node {
+                        tree: Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
                 _ => break,
             }
@@ -199,7 +234,7 @@ impl Parser {
         left
     }
 
-    fn parse_additive(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_additive(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
         let mut left = self.parse_term(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -207,7 +242,10 @@ impl Parser {
                 TokenType::Plus | TokenType::Minus => {
                     iter.next();
                     let right = self.parse_term(iter);
-                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                    left = Node {
+                        tree: Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
 
                 _ => break,
@@ -218,7 +256,7 @@ impl Parser {
         left
     }
 
-    fn parse_term(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_term(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Node {
         let mut left = self.parse_power(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -226,17 +264,26 @@ impl Parser {
                 TokenType::Multiply | TokenType::Divide | TokenType::Percent => {
                     iter.next();
                     let right = self.parse_term(iter);
-                    left = Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right));
+                    left = Node {
+                        tree: Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
                 TokenType::DMultiply => {
                     iter.next();
                     let right = self.parse_term(iter);
-                    left = Tree::BinOp(Box::new(left), TokenType::DMultiply, Box::new(right));
+                    left = Node {
+                        tree: Tree::BinOp(Box::new(left), TokenType::DMultiply, Box::new(right)),
+                        loc: op.loc,
+                    };
                 }
                 TokenType::Equal => {
                     iter.next();
                     let expr = self.parse_expression(iter);
-                    left = Tree::Assign(Box::new(left), Box::new(expr));
+                    left = Node {
+                        tree: Tree::Assign(Box::new(left), Box::new(expr)),
+                        loc: op.loc,
+                    };
                 }
 
                 TokenType::PlusEqu
@@ -246,6 +293,7 @@ impl Parser {
                 | TokenType::PercentEqu
                 | TokenType::PowerEqu => {
                     iter.next();
+                    let op_loc = op.loc;
                     let op = match op.token {
                         TokenType::PlusEqu => TokenType::Plus,
                         TokenType::MinusEqu => TokenType::Minus,
@@ -255,10 +303,16 @@ impl Parser {
                         _ => TokenType::DMultiply,
                     };
                     let right = self.parse_expression(iter);
-                    left = Tree::Assign(
-                        Box::new(left.clone()),
-                        Box::new(Tree::BinOp(Box::new(left), op, Box::new(right))),
-                    );
+                    left = Node {
+                        tree: Tree::Assign(
+                            Box::new(left.clone()),
+                            Box::new(Node {
+                                tree: Tree::BinOp(Box::new(left), op, Box::new(right)),
+                                loc: op_loc,
+                            }),
+                        ),
+                        loc: op_loc,
+                    };
                 }
                 TokenType::OpenSquare => {
                     iter.next();
@@ -270,7 +324,10 @@ impl Parser {
                             }
                             _ => {
                                 let index = self.parse_expression(iter);
-                                left = Tree::ListCall(Box::new(left), Box::new(index));
+                                left = Node {
+                                    tree: Tree::ListCall(Box::new(left), Box::new(index)),
+                                    loc: op.loc,
+                                };
                             }
                         }
                     }
@@ -278,9 +335,12 @@ impl Parser {
                 TokenType::Dot | TokenType::DColon => {
                     iter.next();
                     let member = Box::new(self.parse_factor(iter));
-                    left = Tree::MemberAccess {
-                        target: Box::new(left),
-                        member,
+                    left = Node {
+                        tree: Tree::MemberAccess {
+                            target: Box::new(left),
+                            member,
+                        },
+                        loc: op.loc,
                     };
                 }
 
@@ -290,7 +350,7 @@ impl Parser {
         }
         left
     }
-    fn parse_block(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
+    fn parse_block(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Node> {
         let mut body = vec![];
         if let Some(peek) = iter.peek() {
             match peek.token {
@@ -350,8 +410,8 @@ impl Parser {
     fn next_case(
         &mut self,
         iter: &mut Peekable<std::slice::Iter<'_, Token>>,
-        els: &mut Vec<Tree>,
-        els_ifs: &mut Vec<Tree>,
+        els: &mut Vec<Node>,
+        els_ifs: &mut Vec<Node>,
     ) {
         if let Some(peek) = iter.peek() {
             match peek.token {
@@ -368,10 +428,14 @@ impl Parser {
                     self.next_case(iter, els, els_ifs);
                 }
                 TokenType::ElsIf => {
+                    let elsif_loc = peek.loc;
                     iter.next();
                     let expr = Box::new(self.parse_expression(iter));
                     let body = self.parse_block(iter);
-                    els_ifs.push(Tree::ElsIf { expr, body });
+                    els_ifs.push(Node {
+                        tree: Tree::ElsIf { expr, body },
+                        loc: elsif_loc,
+                    });
                     self.next_case(iter, els, els_ifs);
                 }
                 _ => (),
@@ -383,9 +447,9 @@ impl Parser {
         &mut self,
         iter: &mut Peekable<std::slice::Iter<Token>>,
         close: TokenType,
-        item: fn(&mut Self, &mut Peekable<std::slice::Iter<Token>>) -> Tree,
+        item: fn(&mut Self, &mut Peekable<std::slice::Iter<Token>>) -> Node,
         err_msg: &str,
-    ) -> Vec<Tree> {
+    ) -> Vec<Node> {
         let mut items = vec![];
         while let Some(token) = iter.peek() {
             match token.token {
@@ -405,7 +469,7 @@ impl Parser {
         items
     }
 
-    fn parse_items(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
+    fn parse_items(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Node> {
         self.parse_delimited(
             iter,
             TokenType::CloseSquare,
@@ -414,7 +478,7 @@ impl Parser {
         )
     }
 
-    fn parse_args(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Tree> {
+    fn parse_args(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Node> {
         if self.expect_token(iter, TokenType::OpenParen).is_some() {
             self.parse_delimited(
                 iter,
@@ -430,7 +494,7 @@ impl Parser {
     fn parse_struct_body(
         &mut self,
         iter: &mut Peekable<std::slice::Iter<Token>>,
-    ) -> (Vec<Tree>, Vec<Tree>) {
+    ) -> (Vec<Node>, Vec<Node>) {
         let mut fields = vec![];
         let mut methods = vec![];
 
@@ -461,7 +525,7 @@ impl Parser {
     fn parse_struct_fields(
         &mut self,
         iter: &mut Peekable<std::slice::Iter<Token>>,
-    ) -> FxHashMap<u32, Tree> {
+    ) -> FxHashMap<u32, Node> {
         let mut map = FxHashMap::default();
         while iter
             .peek()
@@ -483,7 +547,7 @@ impl Parser {
         map
     }
 
-    fn parse_power(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_power(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Node {
         let mut left = self.parse_factor(iter);
 
         while let Some(op) = iter.peek().cloned() {
@@ -492,32 +556,67 @@ impl Parser {
             }
             iter.next();
             let right = self.parse_power(iter);
-            left = Tree::BinOp(Box::new(left), TokenType::DMultiply, Box::new(right));
+            left = Node {
+                tree: Tree::BinOp(Box::new(left), TokenType::DMultiply, Box::new(right)),
+                loc: op.loc,
+            };
             self.prev_token = op.clone();
         }
         left
     }
 
-    fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Tree {
+    fn parse_factor(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Node {
         if let Some(it) = iter.next() {
             match &it.token {
-                TokenType::Number(num) => Tree::Number(*num),
-                TokenType::Bool(b) => Tree::Bool(*b),
-                TokenType::Null => Tree::Empty(),
+                TokenType::Number(num) => Node {
+                    tree: Tree::Number(*num),
+                    loc: it.loc,
+                },
+                TokenType::Bool(b) => Node {
+                    tree: Tree::Bool(*b),
+                    loc: it.loc,
+                },
+                TokenType::Null => Node {
+                    tree: Tree::Empty(),
+                    loc: it.loc,
+                },
                 TokenType::Bang => {
                     let expr = self.parse_expression(iter);
-                    Tree::CmpOp(Box::new(expr), TokenType::Bang, Box::new(Tree::Empty()))
+                    Node {
+                        tree: Tree::CmpOp(
+                            Box::new(expr),
+                            TokenType::Bang,
+                            Box::new(Node {
+                                tree: Tree::Empty(),
+                                loc: it.loc,
+                            }),
+                        ),
+                        loc: it.loc,
+                    }
                 }
                 TokenType::BitNot => {
                     let expr = self.parse_expression(iter);
-                    Tree::CmpOp(Box::new(expr), TokenType::BitNot, Box::new(Tree::Empty()))
+                    Node {
+                        tree: Tree::CmpOp(
+                            Box::new(expr),
+                            TokenType::BitNot,
+                            Box::new(Node {
+                                tree: Tree::Empty(),
+                                loc: it.loc,
+                            }),
+                        ),
+                        loc: it.loc,
+                    }
                 }
                 TokenType::Ident(string) => {
                     let ident = intern(string);
                     if let Some(p) = iter.peek() {
                         if p.token == TokenType::OpenParen {
                             let args = self.parse_args(iter);
-                            return Tree::FnCall { name: ident, args };
+                            return Node {
+                                tree: Tree::FnCall { name: ident, args },
+                                loc: it.loc,
+                            };
                         }
                         if p.token == TokenType::OpenCurly {
                             let mut clone = iter.clone();
@@ -543,48 +642,77 @@ impl Parser {
                                 // we really do have `Ident { field1: … }`
                                 iter.next(); // consume the `{`
                                 let fields = self.parse_struct_fields(iter);
-                                return Tree::StructInit {
-                                    name: ident,
-                                    fields,
+                                return Node {
+                                    tree: Tree::StructInit {
+                                        name: ident,
+                                        fields,
+                                    },
+                                    loc: it.loc,
                                 };
                             }
                         }
                     }
-                    Tree::Ident(ident)
+                    Node {
+                        tree: Tree::Ident(ident),
+                        loc: it.loc,
+                    }
                 }
-                TokenType::String(string) => Tree::String(Rc::new(
-                    string
-                        .to_string()
-                        .replace("\\n", "\n")
-                        .replace("\\t", "\t")
-                        .replace("\\r", "\r")
-                        .replace("\\\"", "\""),
-                )),
+                TokenType::String(string) => Node {
+                    tree: Tree::String(Rc::new(
+                        string
+                            .to_string()
+                            .replace("\\n", "\n")
+                            .replace("\\t", "\t")
+                            .replace("\\r", "\r")
+                            .replace("\\\"", "\""),
+                    )),
+                    loc: it.loc,
+                },
                 TokenType::OpenSquare => {
                     let items = self.parse_items(iter);
-                    Tree::List(items)
+                    Node {
+                        tree: Tree::List(items),
+                        loc: it.loc,
+                    }
                 }
                 TokenType::Plus => self.parse_factor(iter),
                 TokenType::Minus => {
                     let factor = self.parse_factor(iter);
-                    Tree::BinOp(
-                        Box::new(Tree::Number(0.0)),
-                        TokenType::Minus,
-                        Box::new(factor),
-                    )
+                    Node {
+                        tree: Tree::BinOp(
+                            Box::new(Node {
+                                tree: Tree::Number(0.0),
+                                loc: it.loc,
+                            }),
+                            TokenType::Minus,
+                            Box::new(factor),
+                        ),
+                        loc: it.loc,
+                    }
                 }
                 TokenType::Ret => {
                     self.prev_token = it.clone();
-                    Tree::Ret(Box::new(self.parse_expression(iter)))
+                    Node {
+                        tree: Tree::Ret(Box::new(self.parse_expression(iter))),
+                        loc: it.loc,
+                    }
                 }
-                TokenType::Break => Tree::Break,
-                TokenType::Continue => Tree::Continue,
+                TokenType::Break => Node {
+                    tree: Tree::Break,
+                    loc: it.loc,
+                },
+                TokenType::Continue => Node {
+                    tree: Tree::Continue,
+                    loc: it.loc,
+                },
                 TokenType::OpenParen => match iter.peek() {
                     Some(tok) if tok.token == TokenType::CloseParen => {
                         iter.next();
                         self.prev_token = it.clone();
-                        let expr = Tree::Empty;
-                        expr()
+                        Node {
+                            tree: Tree::Empty(),
+                            loc: it.loc,
+                        }
                     }
                     _ => {
                         let expr = self.parse_expression(iter);
@@ -596,7 +724,10 @@ impl Parser {
                                     Some(it.loc),
                                     ErrorType::Parsing,
                                 );
-                                Tree::Empty()
+                                Node {
+                                    tree: Tree::Empty(),
+                                    loc: it.loc,
+                                }
                             }
                         }
                     }
@@ -608,7 +739,10 @@ impl Parser {
                             Some(it.loc),
                             ErrorType::Parsing,
                         );
-                        return Tree::Empty();
+                        return Node {
+                            tree: Tree::Empty(),
+                            loc: it.loc,
+                        };
                     };
                     match &tok.token {
                         TokenType::Ident(var) => match iter.peek() {
@@ -616,9 +750,21 @@ impl Parser {
                                 self.prev_token = (*next).clone();
                                 iter.next();
                                 let expr = self.parse_expression(iter);
-                                Tree::Let(intern(var), Box::new(expr))
+                                Node {
+                                    tree: Tree::Let(intern(var), Box::new(expr)),
+                                    loc: it.loc,
+                                }
                             }
-                            _ => Tree::Let(intern(var), Box::new(Tree::Empty())),
+                            _ => Node {
+                                tree: Tree::Let(
+                                    intern(var),
+                                    Box::new(Node {
+                                        tree: Tree::Empty(),
+                                        loc: it.loc,
+                                    }),
+                                ),
+                                loc: it.loc,
+                            },
                         },
                         _ => {
                             Logger::error(
@@ -626,7 +772,10 @@ impl Parser {
                                 Some(it.loc),
                                 ErrorType::Parsing,
                             );
-                            Tree::Empty()
+                            Node {
+                                tree: Tree::Empty(),
+                                loc: it.loc,
+                            }
                         }
                     }
                 }
@@ -637,18 +786,24 @@ impl Parser {
                     let body = self.parse_block(iter);
                     self.next_case(iter, &mut els, &mut els_ifs);
                     self.prev_token = it.clone();
-                    Tree::If {
-                        expr,
-                        body,
-                        els,
-                        els_ifs,
+                    Node {
+                        tree: Tree::If {
+                            expr,
+                            body,
+                            els,
+                            els_ifs,
+                        },
+                        loc: it.loc,
                     }
                 }
                 TokenType::While => {
                     let expr = Box::new(self.parse_expression(iter));
                     let body = self.parse_block(iter);
                     self.prev_token = it.clone();
-                    Tree::While { expr, body }
+                    Node {
+                        tree: Tree::While { expr, body },
+                        loc: it.loc,
+                    }
                 }
                 TokenType::For => {
                     let Some(tok) = iter.next() else {
@@ -657,7 +812,10 @@ impl Parser {
                             Some(it.loc),
                             ErrorType::Parsing,
                         );
-                        return Tree::Empty();
+                        return Node {
+                            tree: Tree::Empty(),
+                            loc: it.loc,
+                        };
                     };
                     match &tok.token {
                         TokenType::Ident(var) => match iter.peek() {
@@ -666,15 +824,21 @@ impl Parser {
                                 let expr = Box::new(self.parse_expression(iter));
                                 let body = self.parse_block(iter);
                                 self.prev_token = it.clone();
-                                Tree::For {
-                                    var: intern(var),
-                                    expr,
-                                    body,
+                                Node {
+                                    tree: Tree::For {
+                                        var: intern(var),
+                                        expr,
+                                        body,
+                                    },
+                                    loc: it.loc,
                                 }
                             }
                             _ => {
                                 Logger::error("Expected ->", Some(it.loc), ErrorType::Parsing);
-                                Tree::Empty()
+                                Node {
+                                    tree: Tree::Empty(),
+                                    loc: it.loc,
+                                }
                             }
                         },
                         _ => {
@@ -683,7 +847,10 @@ impl Parser {
                                 Some(it.loc),
                                 ErrorType::Parsing,
                             );
-                            Tree::Empty()
+                            Node {
+                                tree: Tree::Empty(),
+                                loc: it.loc,
+                            }
                         }
                     }
                 }
@@ -703,13 +870,19 @@ impl Parser {
                                 }
                             }
                         }
-                        return Tree::Fn {
-                            name: intern(&name),
-                            args,
-                            body,
+                        return Node {
+                            tree: Tree::Fn {
+                                name: intern(&name),
+                                args,
+                                body,
+                            },
+                            loc: it.loc,
                         };
                     };
-                    Tree::Empty()
+                    Node {
+                        tree: Tree::Empty(),
+                        loc: it.loc,
+                    }
                 }
 
                 TokenType::Struct => {
@@ -718,27 +891,36 @@ impl Parser {
                     {
                         if self.expect_token(iter, TokenType::OpenCurly).is_some() {
                             let (fields, methods) = self.parse_struct_body(iter);
-                            return Tree::StructDef {
-                                name: intern(&name),
-                                fields,
-                                methods,
+                            return Node {
+                                tree: Tree::StructDef {
+                                    name: intern(&name),
+                                    fields,
+                                    methods,
+                                },
+                                loc: it.loc,
                             };
                         }
                     } else {
                         Logger::error("Expected Struct Name", Some(it.loc), ErrorType::Parsing);
                     }
-                    Tree::Empty()
+                    Node {
+                        tree: Tree::Empty(),
+                        loc: it.loc,
+                    }
                 }
 
                 TokenType::Match => {
                     let expr = Box::new(self.parse_expression(iter));
 
                     if self.expect_token(iter, TokenType::OpenCurly).is_none() {
-                        return Tree::Empty();
+                        return Node {
+                            tree: Tree::Empty(),
+                            loc: it.loc,
+                        };
                     }
 
-                    let mut arms: Vec<(Vec<Tree>, Vec<Tree>)> = vec![];
-                    let mut els: Vec<Tree> = vec![];
+                    let mut arms: Vec<(Vec<Node>, Vec<Node>)> = vec![];
+                    let mut els: Vec<Node> = vec![];
 
                     while let Some(peek) = iter.peek() {
                         let arm_loc = peek.loc;
@@ -763,7 +945,7 @@ impl Parser {
                         }
                         if patterns
                             .iter()
-                            .any(|p| matches!(p, Tree::Ident(id) if *id == intern("_")))
+                            .any(|p| matches!(&p.tree, Tree::Ident(id) if *id == intern("_")))
                         {
                             if !els.is_empty() {
                                 Logger::error(
@@ -778,7 +960,10 @@ impl Parser {
                         }
                     }
                     self.prev_token = it.clone();
-                    Tree::Match { expr, arms, els }
+                    Node {
+                        tree: Tree::Match { expr, arms, els },
+                        loc: it.loc,
+                    }
                 }
 
                 TokenType::Import => {
@@ -791,7 +976,10 @@ impl Parser {
                             alias = Some(intern(name));
                         }
                     }
-                    Tree::Import { path, alias }
+                    Node {
+                        tree: Tree::Import { path, alias },
+                        loc: it.loc,
+                    }
                 }
 
                 TokenType::Els | TokenType::ElsIf => {
@@ -800,7 +988,10 @@ impl Parser {
                         Some(it.loc),
                         ErrorType::Parsing,
                     );
-                    Tree::Empty()
+                    Node {
+                        tree: Tree::Empty(),
+                        loc: it.loc,
+                    }
                 }
                 _ => {
                     Logger::error(
@@ -808,7 +999,10 @@ impl Parser {
                         Some(it.loc),
                         ErrorType::Parsing,
                     );
-                    Tree::Empty()
+                    Node {
+                        tree: Tree::Empty(),
+                        loc: it.loc,
+                    }
                 }
             }
         } else {
@@ -817,7 +1011,11 @@ impl Parser {
                 Some(self.prev_token.loc),
                 ErrorType::Parsing,
             );
-            Tree::Empty()
+            Node {
+                tree: Tree::Empty(),
+                loc: self.prev_token.loc,
+            }
         }
     }
 }
+

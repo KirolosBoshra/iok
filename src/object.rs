@@ -1,6 +1,8 @@
 use crate::file_handler::FileHandler;
 use crate::interner::{intern, resolve};
-use crate::parser::Tree;
+use crate::lexer::Loc;
+use crate::logger::{ErrorType, Logger};
+use crate::parser::Node;
 use crate::socket::Socket;
 use crate::std_native::NativeFn;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
@@ -37,7 +39,7 @@ pub enum Object {
     Fn {
         name: u32,
         args: Vec<(u32, Object)>,
-        body: Rc<Vec<Tree>>,
+        body: Rc<Vec<Node>>,
     },
     NativeFn {
         name: String,
@@ -210,12 +212,16 @@ impl Object {
         }
     }
 
-    pub fn simple_method(&mut self, name: u32, args: &[Object]) -> Object {
+    pub fn simple_method(&mut self, name: u32, args: &[Object], loc: Loc) -> Object {
         match name {
             id if id == *M_LEN => Object::Number(self.get_len() as f64),
             id if id == *M_PUSH => {
                 if args.len() != 1 {
-                    println!("Expected 1 arg found {}", args.len());
+                    Logger::error(
+                        &format!("Expected 1 arg found {}", args.len()),
+                        Some(loc),
+                        ErrorType::RunTime,
+                    );
                     return Object::Null;
                 }
                 self.push(args[0].clone());

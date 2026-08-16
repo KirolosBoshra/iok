@@ -93,7 +93,7 @@ pub enum TokenType {
     As,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Loc {
     pub x: usize,
     pub y: usize,

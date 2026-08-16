@@ -10,6 +10,7 @@ mod std_native;
 
 use interpreter::Interpreter;
 use lexer::Lexer;
+use logger::Logger;
 use parser::Parser;
 use std::{env, fs::File, io, io::Read, io::Write, path::Path};
 fn interpret_mode(interpreter: &mut Interpreter) {
@@ -31,10 +32,12 @@ fn interpret_mode(interpreter: &mut Interpreter) {
             continue;
         }
 
+        Logger::push_source("<repl>", &input);
         let mut lexer = Lexer::new(&input);
         let mut parser = Parser::new(lexer.tokenize());
         let ast = parser.parse_tokens();
         let obj = interpreter.interpret(ast.last().unwrap());
+        Logger::pop_source();
         println!("-> {}", obj);
     }
 }
@@ -88,10 +91,16 @@ fn main() {
         let file_name = file_name.unwrap().clone();
 
         let mut input = String::new();
-        let mut file =
-            File::open(file_name.clone()).expect(&format!("Can't open file {}", file_name.clone()));
+        let mut file = match File::open(file_name.clone()) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Can't open file {}: {}", file_name, e);
+                std::process::exit(1);
+            }
+        };
         file.read_to_string(&mut input).expect("can't read file");
 
+        Logger::push_source(&file_name, &input);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.tokenize();
 
@@ -115,5 +124,9 @@ fn main() {
         parsed_tree.iter().for_each(|stmt| {
             interpreter.interpret(stmt);
         });
+
+        if Logger::error_count() > 0 {
+            std::process::exit(1);
+        }
     }
 }
