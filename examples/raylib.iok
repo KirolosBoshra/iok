@@ -69,10 +69,13 @@ struct Paddle {
         // only chase the ball once it crosses into the bot's half
         if ball.x > 400 {
             let target = ball.y - self.h / 2
-            if self.y < target {
+            // dead zone: stop within one step of target, else it oscillates
+            if self.y + self.speed < target {
                 self.y = self.y + self.speed
             } els {
-                self.y = self.y - self.speed
+                if self.y - self.speed > target {
+                    self.y = self.y - self.speed
+                }
             }
         }
     }
