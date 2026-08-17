@@ -9,6 +9,8 @@ license = "Apache-2.0"
 [dependencies]
 rustc-hash = { version = "2.1" }
 lazy_static = "1.5.0"
+libloading = "0.9"
+libffi = "3"
 
 [profile.release]
 lto = "thin"

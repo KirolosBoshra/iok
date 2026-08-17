@@ -1,3 +1,4 @@
+use crate::ffi;
 use crate::interner::{intern, resolve};
 use crate::std_native;
 use crate::{
@@ -109,6 +110,14 @@ impl Interpreter {
             std_native::socket_peer_addr
         );
         register_native!(base_scope, "__socket_read_all", std_native::socket_read_all);
+        register_native!(base_scope, "__dlopen", std_native::dlopen);
+        register_native!(base_scope, "__dlsym", std_native::dlsym);
+        register_native!(base_scope, "__def_struct", std_native::def_struct);
+        register_native!(base_scope, "__struct_val", std_native::struct_val);
+        register_native!(base_scope, "__get_field", std_native::get_field);
+        register_native!(base_scope, "__set_field", std_native::set_field);
+        register_native!(base_scope, "__byref", std_native::byref);
+        register_native!(base_scope, "__nullptr", std_native::null_ptr);
 
         let vars = base_scope
             .into_iter()
@@ -844,6 +853,12 @@ impl Interpreter {
                 Object::Ret(expr) => *expr,
                 _ => Object::Null,
             };
+        } else if let Object::ForeignFn { symbol, sig, .. } = function {
+            let mut args_objects = vec![];
+            call_args.iter().for_each(|arg| {
+                args_objects.push(self.interpret(arg));
+            });
+            return ffi::call_foreign(sig, *symbol, &args_objects);
         } else if let Object::NativeFn { function, .. } = function {
             let mut args_objects = vec![];
             call_args.iter().for_each(|arg| {
