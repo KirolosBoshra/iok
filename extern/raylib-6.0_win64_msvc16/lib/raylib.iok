@@ -1,0 +1,47 @@
+// raylib wrapper for IOk — thin FFI bindings for raylib.dll
+// Loads ./extern/raylib-6.0_win64_msvc16/lib/raylib.dll (repo root), falls back to bare "raylib.dll" (PATH / exe dir)
+
+import std::ffi
+
+let lib = ffi::load("./extern/raylib-6.0_win64_msvc16/lib/raylib.dll")
+if lib == null {
+    lib = ffi::load("raylib.dll")
+}
+
+if lib == null {
+    write("raylib.dll not found — copy it next to iok.exe or add its dir to PATH\n")
+    exit(1)
+}
+
+ffi::def_struct("Color", "r:u8, g:u8, b:u8, a:u8")
+ffi::def_struct("Vector2", "x:f32, y:f32")
+
+fn color(r, g, b, a=255) => ret ffi::struct_val("Color", [r, g, b, a])
+fn vec2(x, y) => ret ffi::struct_val("Vector2", [x, y])
+
+// window
+let init_window = ffi::sym(lib, "InitWindow", "i32, i32, str -> void")
+let window_should_close = ffi::sym(lib, "WindowShouldClose", "-> i32")
+let close_window = ffi::sym(lib, "CloseWindow", "-> void")
+let set_target_fps = ffi::sym(lib, "SetTargetFPS", "i32 -> void")
+let screen_width = ffi::sym(lib, "GetScreenWidth", "-> i32")
+let screen_height = ffi::sym(lib, "GetScreenHeight", "-> i32")
+let get_time = ffi::sym(lib, "GetTime", "-> f64")
+
+// drawing
+let begin_drawing = ffi::sym(lib, "BeginDrawing", "-> void")
+let end_drawing = ffi::sym(lib, "EndDrawing", "-> void")
+let clear_background = ffi::sym(lib, "ClearBackground", "Color -> void")
+let draw_circle = ffi::sym(lib, "DrawCircle", "i32, i32, f32, Color -> void")
+let draw_rectangle = ffi::sym(lib, "DrawRectangle", "i32, i32, i32, i32, Color -> void")
+let draw_line = ffi::sym(lib, "DrawLine", "i32, i32, i32, i32, Color -> void")
+let draw_text = ffi::sym(lib, "DrawText", "str, i32, i32, i32, Color -> void")
+let draw_fps = ffi::sym(lib, "DrawFPS", "i32, i32 -> void")
+
+// input
+let is_key_down = ffi::sym(lib, "IsKeyDown", "i32 -> i32")
+
+// keys (raylib KEY_*)
+let KEY_SPACE = 32
+let KEY_ESCAPE = 256
+let KEY_ENTER = 257
