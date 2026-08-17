@@ -1,4 +1,5 @@
 use crate::file_handler::FileHandler;
+use crate::ffi::{CLayout, ParsedSig};
 use crate::interner::{intern, resolve};
 use crate::lexer::Loc;
 use crate::logger::{ErrorType, Logger};
@@ -7,8 +8,10 @@ use crate::socket::Socket;
 use crate::std_native::NativeFn;
 use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
 use lazy_static::lazy_static;
+use libloading::Library;
 use rustc_hash::FxHashMap;
-use std::{fmt, ops::BitOr, rc::Rc};
+use std::sync::Arc;
+use std::{fmt, ops::BitOr, os::raw::c_void, rc::Rc};
 
 lazy_static! {
     pub static ref M_LEN: u32 = intern("len");
@@ -58,6 +61,21 @@ pub enum Object {
         name: u32,
         namespace: Box<FxHashMap<u32, Object>>,
     },
+    Lib {
+        path: String,
+        lib: Rc<Library>,
+    },
+    ForeignFn {
+        symbol: *mut c_void,
+        lib: Rc<Library>,
+        name: String,
+        sig: Rc<ParsedSig>,
+    },
+    CStruct {
+        layout: Arc<CLayout>,
+        bytes: Rc<Vec<u8>>,
+    },
+    Ptr(*mut c_void),
     Null,
     Invalid,
     Break,
@@ -356,6 +374,34 @@ impl PartialEq for Object {
                     namespace: ns2,
                 },
             ) => n1 == n2 && ns1 == ns2,
+            (Object::Lib { path: p1, lib: l1 }, Object::Lib { path: p2, lib: l2 }) => {
+                p1 == p2 && Rc::ptr_eq(l1, l2)
+            }
+            (
+                Object::ForeignFn {
+                    symbol: s1,
+                    lib: l1,
+                    name: n1,
+                    sig: sig1,
+                },
+                Object::ForeignFn {
+                    symbol: s2,
+                    lib: l2,
+                    name: n2,
+                    sig: sig2,
+                },
+            ) => s1 == s2 && Rc::ptr_eq(l1, l2) && n1 == n2 && Rc::ptr_eq(sig1, sig2),
+            (
+                Object::CStruct {
+                    layout: l1,
+                    bytes: b1,
+                },
+                Object::CStruct {
+                    layout: l2,
+                    bytes: b2,
+                },
+            ) => Arc::ptr_eq(l1, l2) && b1 == b2,
+            (Object::Ptr(a), Object::Ptr(b)) => a == b,
             (Object::Null, Object::Null) => true,
             (Object::Invalid, Object::Invalid) => true,
             (Object::Break, Object::Break) => true,
@@ -404,6 +450,12 @@ impl fmt::Display for Object {
                 fields: _,
             } => write!(f, "Object{def}"),
             Object::NameSpace { name, .. } => write!(f, "@{}", resolve(*name)),
+            Object::Lib { path, .. } => write!(f, "Lib<{path}>"),
+            Object::ForeignFn { name, .. } => write!(f, "ForeignFn<{name}>"),
+            Object::CStruct { layout, .. } => {
+                write!(f, "Struct<{}>", resolve(layout.name))
+            }
+            Object::Ptr(p) => write!(f, "0x{:x}", (*p) as usize),
             Object::Null => write!(f, "null"),
             Object::Invalid => write!(f, "invalid"),
             Object::Break => write!(f, "break"),

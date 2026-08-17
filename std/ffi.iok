@@ -1,0 +1,15 @@
+fn load(path) => ret __dlopen(path)
+
+fn sym(lib, name, sig) => ret __dlsym(lib, name, sig)
+
+fn def_struct(name, spec) => ret __def_struct(name, spec)
+
+fn struct_val(name, vals) => ret __struct_val(name, vals)
+
+fn field(v, name) => ret __get_field(v, name)
+
+fn set_field(v, name, val) => ret __set_field(v, name, val)
+
+fn byref(v) => ret __byref(v)
+
+fn nullptr() => ret __nullptr()

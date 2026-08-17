@@ -1,3 +1,4 @@
+mod ffi;
 mod file_handler;
 mod interner;
 mod interpreter;

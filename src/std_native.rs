@@ -1,9 +1,13 @@
+use crate::ffi;
 use crate::file_handler::FileHandler;
 use crate::interner::intern;
 use crate::interpreter::Interpreter;
+use crate::logger::{ErrorType, Logger};
 use crate::object::Object;
 use crate::socket::Socket;
+use libloading::{Library, Symbol};
 use std::io::Write;
+use std::os::raw::c_void;
 use std::rc::Rc;
 
 pub type NativeFn = fn(Vec<Object>, &mut Interpreter) -> Object;
@@ -317,4 +321,152 @@ pub fn socket_peer_addr(args: Vec<Object>, _: &mut Interpreter) -> Object {
     } else {
         Object::Null
     }
+}
+
+pub fn dlopen(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::String(path)) = args.first() {
+        match unsafe { Library::new(&**path) } {
+            Ok(lib) => Object::Lib {
+                path: (**path).clone(),
+                lib: Rc::new(lib),
+            },
+            Err(_) => Object::Null,
+        }
+    } else {
+        Object::Null
+    }
+}
+
+pub fn dlsym(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::Lib { lib, .. }), Some(Object::String(name)), Some(Object::String(sig))) =
+        (args.get(0), args.get(1), args.get(2))
+    {
+        let parsed = match ffi::parse_sig(sig) {
+            Ok(p) => p,
+            Err(e) => {
+                Logger::error(&e, None, ErrorType::RunTime);
+                return Object::Null;
+            }
+        };
+        unsafe {
+            let symbol: Symbol<*mut c_void> = match lib.get(name.as_bytes()) {
+                Ok(s) => s,
+                Err(_) => return Object::Null,
+            };
+            return Object::ForeignFn {
+                symbol: *symbol,
+                lib: lib.clone(),
+                name: (**name).clone(),
+                sig: Rc::new(parsed),
+            };
+        }
+    }
+    Object::Null
+}
+
+pub fn def_struct(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::String(name)), Some(Object::String(spec))) =
+        (args.get(0), args.get(1))
+    {
+        let name_id = intern(&**name);
+        let mut fields = vec![];
+        for part in spec.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+            let (fname, ftype) = match part.split_once(':') {
+                Some((f, t)) => (f.trim(), t.trim()),
+                None => {
+                    Logger::error(
+                        &format!("Bad field `{part}`, expected `name:type`"),
+                        None,
+                        ErrorType::RunTime,
+                    );
+                    return Object::Null;
+                }
+            };
+            match ffi::parse_type(ftype) {
+                Ok(t) => fields.push((intern(fname), t)),
+                Err(e) => {
+                    Logger::error(&e, None, ErrorType::RunTime);
+                    return Object::Null;
+                }
+            }
+        }
+        let layout = ffi::compute_layout(name_id, fields);
+        ffi::register_struct(name_id, layout);
+        return Object::String(Rc::new((**name).clone()));
+    }
+    Object::Null
+}
+
+pub fn struct_val(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::String(name)), Some(Object::List(vals))) =
+        (args.get(0), args.get(1))
+    {
+        let layout = match ffi::get_struct(intern(&**name)) {
+            Some(l) => l,
+            None => {
+                Logger::error(
+                    &format!("Unknown struct `{name}`"),
+                    None,
+                    ErrorType::RunTime,
+                );
+                return Object::Null;
+            }
+        };
+        if vals.len() != layout.fields.len() {
+            Logger::error(
+                &format!(
+                    "struct `{name}` needs {} values, got {}",
+                    layout.fields.len(),
+                    vals.len()
+                ),
+                None,
+                ErrorType::RunTime,
+            );
+            return Object::Null;
+        }
+        let mut bytes = vec![0u8; layout.size];
+        let mut strings = vec![];
+        for ((_, t, off), v) in layout.fields.iter().zip(vals) {
+            if let Err(e) = ffi::marshal_scalar(t, v, bytes[*off..].as_mut_ptr(), &mut strings) {
+                Logger::error(&e, None, ErrorType::RunTime);
+                return Object::Null;
+            }
+        }
+        return Object::CStruct {
+            layout,
+            bytes: Rc::new(bytes),
+        };
+    }
+    Object::Null
+}
+
+pub fn get_field(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(obj), Some(Object::String(fname))) = (args.first(), args.get(1)) {
+        return ffi::struct_field(obj, intern(&**fname));
+    }
+    Object::Null
+}
+
+pub fn set_field(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(obj), Some(Object::String(fname)), Some(value)) =
+        (args.first(), args.get(1), args.get(2))
+    {
+        return ffi::set_struct_field(obj, intern(&**fname), value);
+    }
+    Object::Null
+}
+
+pub fn byref(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::CStruct { bytes, .. }) = args.first() {
+        return Object::Ptr(bytes.as_ptr() as *mut c_void);
+    }
+    Object::Null
+}
+
+pub fn null_ptr(_: Vec<Object>, _: &mut Interpreter) -> Object {
+    Object::Ptr(std::ptr::null_mut())
 }

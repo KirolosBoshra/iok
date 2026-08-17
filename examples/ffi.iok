@@ -1,0 +1,40 @@
+// FFI example: call native functions from shared libraries (.dll / .so)
+// Run: cargo run -- --std ./std/ ./examples/ffi.iok
+
+import std::ffi
+import std::io
+
+// msvcrt.dll (Windows) and libc.so.6 (Linux) both export strlen
+let lib = ffi::load("msvcrt.dll")
+if lib == null {
+    lib = ffi::load("libc.so.6")
+}
+
+if lib == null {
+    io::println("Failed to load msvcrt.dll / libc.so.6")
+    exit(1)
+}
+
+let strlen = ffi::sym(lib, "strlen", "str -> i64")
+io::println("strlen(\"Hello, native world!\") = " + strlen("Hello, native world!"))
+
+// struct-by-pointer demo: gettimeofday (unix) / GetSystemTimeAsFileTime (windows)
+ffi::def_struct("TimeVal", "sec:i64, usec:i64")
+ffi::def_struct("FileTime", "lo:u32, hi:u32")
+
+let gettimeofday = ffi::sym(lib, "gettimeofday", "*TimeVal, ptr -> i32")
+if gettimeofday != null {
+    let tv = ffi::struct_val("TimeVal", [0, 0])
+    let rc = gettimeofday(ffi::byref(tv), ffi::nullptr())
+    io::println("gettimeofday rc=" + rc + " sec=" + ffi::field(tv, "sec"))
+} els {
+    let kernel32 = ffi::load("kernel32.dll")
+    let gt = ffi::sym(kernel32, "GetSystemTimeAsFileTime", "*FileTime -> void")
+    if gt != null {
+        let ft = ffi::struct_val("FileTime", [0, 0])
+        gt(ffi::byref(ft))
+        io::println("FILETIME lo=" + ffi::field(ft, "lo") + " hi=" + ffi::field(ft, "hi"))
+    } els {
+        io::println("no time function found")
+    }
+}
