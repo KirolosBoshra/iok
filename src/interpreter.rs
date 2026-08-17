@@ -301,12 +301,8 @@ impl Interpreter {
                     _ => Object::Invalid,
                 };
             }
-            TokenType::And => {
-                Bool(left.to_bool_obj().get_bool_value() && right.to_bool_obj().get_bool_value())
-            }
-            TokenType::Or => {
-                Bool(left.to_bool_obj().get_bool_value() || right.to_bool_obj().get_bool_value())
-            }
+            TokenType::And => Bool(left.to_bool() && right.to_bool()),
+            TokenType::Or => Bool(left.to_bool() || right.to_bool()),
 
             // Default case if none of the above match
             _ => Bool(false),
@@ -653,7 +649,8 @@ impl Interpreter {
                             if let Object::StructDef { methods, .. } = &**struct_def {
                                 let methods = methods.clone();
                                 if let Some(method) = methods.get(name) {
-                                    let result = self.call_method(method, args, &mut target_object);
+                                    let result =
+                                        self.call_function(method, args, Some(&mut target_object));
                                     if let Some(slot) = self.interpret_mut(target) {
                                         *slot = target_object;
                                     }
@@ -664,18 +661,20 @@ impl Interpreter {
                         }
 
                         if let Object::StructDef { ref methods, .. } = &target_object {
-                            return match methods.get(name) {
+                            let method = methods.get(name).cloned();
+                            return match method {
                                 Some(method) => {
-                                    self.call_function(method, args, Some(&target_object))
+                                    self.call_function(&method, args, Some(&mut target_object))
                                 }
                                 None => Object::Null,
                             };
                         }
 
                         if let Object::NameSpace { ref namespace, .. } = &target_object {
-                            return match namespace.get(name) {
+                            let method = namespace.get(name).cloned();
+                            return match method {
                                 Some(method) => {
-                                    self.call_function(method, args, Some(&target_object))
+                                    self.call_function(&method, args, Some(&mut target_object))
                                 }
                                 None => Object::Null,
                             };
@@ -806,7 +805,7 @@ impl Interpreter {
         &mut self,
         function: &Object,
         call_args: &Vec<Node>,
-        slf: Option<&Object>,
+        mut slf: Option<&mut Object>,
     ) -> Object {
         if let Object::Fn { args, body, .. } = function {
             self.enter_fn_scope();
@@ -819,7 +818,7 @@ impl Interpreter {
                 };
                 self.set_var(*arg_name, value);
             }
-            if let Some(obj) = slf {
+            if let Some(obj) = slf.as_deref_mut() {
                 if let Object::NameSpace { namespace, .. } = obj {
                     for (name, value) in namespace.iter() {
                         self.set_var(*name, value.clone());
@@ -831,6 +830,14 @@ impl Interpreter {
 
             // Execute the function body
             let result = self.eval_block(&body);
+            // Write mutated `self` back to the caller's instance.
+            if let Some(obj) = slf {
+                if !matches!(obj, Object::NameSpace { .. }) {
+                    if let Some(slf_slot) = self.get_var(&*M_SELF) {
+                        *obj = std::mem::take(slf_slot);
+                    }
+                }
+            }
             self.exit_scope();
             // Return result or Object::Null
             return match result {
@@ -843,37 +850,6 @@ impl Interpreter {
                 args_objects.push(self.interpret(arg));
             });
             return function(args_objects, self);
-        }
-        Object::Null
-    }
-
-    fn call_method(
-        &mut self,
-        function: &Object,
-        call_args: &Vec<Node>,
-        slf: &mut Object,
-    ) -> Object {
-        if let Object::Fn { args, body, .. } = function {
-            self.enter_fn_scope();
-            for (i, (arg_name, default_value)) in args.iter().enumerate() {
-                let value = if i < call_args.len() {
-                    self.interpret(&call_args[i])
-                } else {
-                    default_value.clone()
-                };
-                self.set_var(*arg_name, value);
-            }
-            self.set_var(*M_SELF, slf.clone());
-            let result = self.eval_block(&body);
-            // Write mutated `self` back to the caller's instance.
-            if let Some(slf_slot) = self.get_var(&*M_SELF) {
-                *slf = std::mem::take(slf_slot);
-            }
-            self.exit_scope();
-            return match result {
-                Object::Ret(expr) => *expr,
-                _ => Object::Null,
-            };
         }
         Object::Null
     }
