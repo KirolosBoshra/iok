@@ -40,8 +40,18 @@ let draw_fps = ffi::sym(lib, "DrawFPS", "i32, i32 -> void")
 
 // input
 let is_key_down = ffi::sym(lib, "IsKeyDown", "i32 -> i32")
+let get_mouse_x = ffi::sym(lib, "GetMouseX", "-> i32")
+let get_mouse_y = ffi::sym(lib, "GetMouseY", "-> i32")
+let is_mouse_button_down = ffi::sym(lib, "IsMouseButtonDown", "i32 -> i32")
 
 // keys (raylib KEY_*)
 let KEY_SPACE = 32
 let KEY_ESCAPE = 256
 let KEY_ENTER = 257
+let KEY_UP = 265
+let KEY_DOWN = 264
+let KEY_LEFT = 263
+let KEY_RIGHT = 262
+
+// mouse buttons (raylib MOUSE_BUTTON_*)
+let MOUSE_LEFT = 0
