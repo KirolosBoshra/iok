@@ -65,45 +65,6 @@ pub enum Object {
 }
 
 impl Object {
-    pub fn to_string_obj(&self) -> Object {
-        match self {
-            Object::String(ref s) => Object::String(Rc::clone(s)),
-            Object::Number(num) => Object::String(Rc::new(num.to_string())),
-            Object::Bool(b) => Object::String(Rc::new(b.to_string())),
-            Object::Null => Object::String(Rc::new(String::new())),
-            _ => Object::String(Rc::new(String::new())),
-        }
-    }
-
-    pub fn to_number_obj(&self) -> Object {
-        match self {
-            Object::String(s) => s.parse().map_or(Object::Invalid, Object::Number),
-            Object::Number(n) => Object::Number(*n),
-            Object::Bool(b) => Object::Number(if *b { 1.0 } else { 0.0 }),
-            Object::Null => Object::Number(0.0),
-            _ => Object::Number(0.0),
-        }
-    }
-
-    pub fn to_bool_obj(&self) -> Object {
-        match self {
-            Object::String(s) => Object::Bool(!s.is_empty()),
-            Object::Number(num) => Object::Bool(*num != 0.0),
-            Object::Bool(b) => Object::Bool(*b),
-            Object::Null => Object::Bool(false),
-            _ => Object::Bool(false),
-        }
-    }
-
-    pub fn get_string_value(&self) -> String {
-        if let Object::String(s) = self.to_string_obj() {
-            (*s).clone()
-        } else {
-            String::new()
-        }
-    }
-
-    #[inline]
     pub fn to_f64(&self) -> f64 {
         match self {
             Object::String(s) => s.parse().map_or(0.0, |n: f64| n),
@@ -126,14 +87,6 @@ impl Object {
             Object::Number(num) => *num != 0.0,
             Object::Bool(b) => *b,
             _ => false,
-        }
-    }
-
-    pub fn get_bool_value(&self) -> bool {
-        if let Object::Bool(b) = self {
-            *b
-        } else {
-            false
         }
     }
 
@@ -475,15 +428,15 @@ impl AddAssign for Object {
     fn add_assign(&mut self, rhs: Self) {
         match self {
             Object::Number(num) => {
-                if let Object::Number(n) = rhs.to_number_obj() {
-                    *num += n;
-                }
+                *num += rhs.to_f64();
             }
             Object::String(s) => {
                 let s_mut = Rc::make_mut(s);
-                match rhs {
-                    Object::String(r) => s_mut.push_str(&r),
-                    other => s_mut.push_str(&other.to_string_obj().get_string_value()),
+                match &rhs {
+                    Object::String(r) => s_mut.push_str(r),
+                    Object::Number(n) => s_mut.push_str(&n.to_string()),
+                    Object::Bool(b) => s_mut.push_str(&b.to_string()),
+                    _ => {}
                 }
             }
             Object::List(l) => {

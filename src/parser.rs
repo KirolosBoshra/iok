@@ -116,7 +116,7 @@ impl Parser {
         &mut self,
         iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
     ) -> Node {
-        let mut left = self.parse_or(iter);
+        let mut left = self.parse_binop(iter, 1);
 
         while let Some(op) = iter.peek().cloned() {
             match op.token {
@@ -170,155 +170,46 @@ impl Parser {
         left
     }
 
-    fn parse_or(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
-        let mut left = self.parse_and(iter);
-
-        while let Some(op) = iter.peek().cloned() {
-            match op.token {
-                TokenType::Or => {
-                    iter.next();
-                    let right = self.parse_and(iter);
-                    left = Node {
-                        tree: Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right)),
-                        loc: op.loc,
-                    };
-                }
-                _ => break,
-            }
-            self.prev_token = op.clone();
-        }
-
-        left
+    fn binop_prec(op: &TokenType) -> Option<(u8, bool)> {
+        Some(match op {
+            TokenType::Equal
+            | TokenType::PlusEqu
+            | TokenType::MinusEqu
+            | TokenType::MultiplyEqu
+            | TokenType::DivideEqu
+            | TokenType::PercentEqu
+            | TokenType::PowerEqu
+            | TokenType::BitAnd
+            | TokenType::BitOR
+            | TokenType::Shl
+            | TokenType::Shr => (1, true),
+            TokenType::Or => (2, false),
+            TokenType::And => (3, false),
+            TokenType::EquEqu
+            | TokenType::NotEqu
+            | TokenType::Greater
+            | TokenType::GreatEqu
+            | TokenType::Less
+            | TokenType::LessEqu => (4, false),
+            TokenType::Plus | TokenType::Minus => (5, false),
+            TokenType::Multiply | TokenType::Divide | TokenType::Percent => (6, false),
+            TokenType::DMultiply => (7, true),
+            _ => return None,
+        })
     }
 
-    fn parse_and(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
-        let mut left = self.parse_cmp(iter);
-
-        while let Some(op) = iter.peek().cloned() {
-            match op.token {
-                TokenType::And => {
-                    iter.next();
-                    let right = self.parse_cmp(iter);
-                    left = Node {
-                        tree: Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right)),
-                        loc: op.loc,
-                    };
-                }
-                _ => break,
-            }
-            self.prev_token = op.clone();
-        }
-
-        left
-    }
-
-    fn parse_cmp(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
-        let mut left = self.parse_additive(iter);
-
-        while let Some(op) = iter.peek().cloned() {
-            match op.token {
-                TokenType::EquEqu
-                | TokenType::NotEqu
-                | TokenType::Greater
-                | TokenType::GreatEqu
-                | TokenType::Less
-                | TokenType::LessEqu => {
-                    iter.next();
-                    let right = self.parse_additive(iter);
-                    left = Node {
-                        tree: Tree::CmpOp(Box::new(left), op.token.clone(), Box::new(right)),
-                        loc: op.loc,
-                    };
-                }
-                _ => break,
-            }
-            self.prev_token = op.clone();
-        }
-
-        left
-    }
-
-    fn parse_additive(&mut self, iter: &mut std::iter::Peekable<std::slice::Iter<Token>>) -> Node {
-        let mut left = self.parse_term(iter);
-
-        while let Some(op) = iter.peek().cloned() {
-            match op.token {
-                TokenType::Plus | TokenType::Minus => {
-                    iter.next();
-                    let right = self.parse_term(iter);
-                    left = Node {
-                        tree: Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right)),
-                        loc: op.loc,
-                    };
-                }
-
-                _ => break,
-            }
-            self.prev_token = op.clone();
-        }
-
-        left
-    }
-
-    fn parse_term(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Node {
+    fn parse_binop(
+        &mut self,
+        iter: &mut std::iter::Peekable<std::slice::Iter<Token>>,
+        min_prec: u8,
+    ) -> Node {
         let mut left = self.parse_power(iter);
 
-        while let Some(op) = iter.peek().cloned() {
-            match op.token {
-                TokenType::Multiply | TokenType::Divide | TokenType::Percent => {
-                    iter.next();
-                    let right = self.parse_term(iter);
-                    left = Node {
-                        tree: Tree::BinOp(Box::new(left), op.token.clone(), Box::new(right)),
-                        loc: op.loc,
-                    };
-                }
-                TokenType::DMultiply => {
-                    iter.next();
-                    let right = self.parse_term(iter);
-                    left = Node {
-                        tree: Tree::BinOp(Box::new(left), TokenType::DMultiply, Box::new(right)),
-                        loc: op.loc,
-                    };
-                }
-                TokenType::Equal => {
-                    iter.next();
-                    let expr = self.parse_expression(iter);
-                    left = Node {
-                        tree: Tree::Assign(Box::new(left), Box::new(expr)),
-                        loc: op.loc,
-                    };
-                }
+        loop {
+            let op = iter.peek().cloned();
 
-                TokenType::PlusEqu
-                | TokenType::MinusEqu
-                | TokenType::MultiplyEqu
-                | TokenType::DivideEqu
-                | TokenType::PercentEqu
-                | TokenType::PowerEqu => {
-                    iter.next();
-                    let op_loc = op.loc;
-                    let op = match op.token {
-                        TokenType::PlusEqu => TokenType::Plus,
-                        TokenType::MinusEqu => TokenType::Minus,
-                        TokenType::MultiplyEqu => TokenType::Multiply,
-                        TokenType::DivideEqu => TokenType::Divide,
-                        TokenType::PercentEqu => TokenType::Percent,
-                        _ => TokenType::DMultiply,
-                    };
-                    let right = self.parse_expression(iter);
-                    left = Node {
-                        tree: Tree::Assign(
-                            Box::new(left.clone()),
-                            Box::new(Node {
-                                tree: Tree::BinOp(Box::new(left), op, Box::new(right)),
-                                loc: op_loc,
-                            }),
-                        ),
-                        loc: op_loc,
-                    };
-                }
-                TokenType::OpenSquare => {
+            match op.as_ref().map(|o| &o.token) {
+                Some(TokenType::OpenSquare) => {
                     iter.next();
                     while let Some(peek) = iter.peek().clone() {
                         match peek.token {
@@ -330,27 +221,27 @@ impl Parser {
                                 let index = self.parse_expression(iter);
                                 left = Node {
                                     tree: Tree::ListCall(Box::new(left), Box::new(index)),
-                                    loc: op.loc,
+                                    loc: op.as_ref().unwrap().loc,
                                 };
                             }
                         }
                     }
+                    self.prev_token = op.cloned().unwrap();
+                    continue;
                 }
-                TokenType::OpenParen => {
-                    if matches!(&left.tree, Tree::Fn { name: None, .. }) {
-                        let args = self.parse_args(iter);
-                        left = Node {
-                            tree: Tree::ImmCall {
-                                callee: Box::new(left),
-                                args,
-                            },
-                            loc: op.loc,
-                        };
-                    } else {
-                        break;
-                    }
+                Some(TokenType::OpenParen) if matches!(&left.tree, Tree::Fn { name: None, .. }) => {
+                    let args = self.parse_args(iter);
+                    left = Node {
+                        tree: Tree::ImmCall {
+                            callee: Box::new(left),
+                            args,
+                        },
+                        loc: op.as_ref().unwrap().loc,
+                    };
+                    self.prev_token = op.cloned().unwrap();
+                    continue;
                 }
-                TokenType::Dot | TokenType::DColon => {
+                Some(TokenType::Dot) | Some(TokenType::DColon) => {
                     iter.next();
                     let member = Box::new(self.parse_factor(iter));
                     left = Node {
@@ -358,14 +249,78 @@ impl Parser {
                             target: Box::new(left),
                             member,
                         },
-                        loc: op.loc,
+                        loc: op.as_ref().unwrap().loc,
                     };
+                    self.prev_token = op.cloned().unwrap();
+                    continue;
                 }
-
-                _ => break,
+                _ => {}
             }
-            self.prev_token = op.clone();
+
+            let Some(op) = iter.peek() else { break };
+            let Some((prec, right_assoc)) = Self::binop_prec(&op.token) else {
+                break;
+            };
+            if prec < min_prec {
+                break;
+            }
+            let op_token = op.token.clone();
+            let op_loc = op.loc;
+            iter.next();
+            let next_min = if right_assoc { prec } else { prec + 1 };
+            let right = self.parse_binop(iter, next_min);
+            left = match &op_token {
+                TokenType::Equal => Node {
+                    tree: Tree::Assign(Box::new(left), Box::new(right)),
+                    loc: op_loc,
+                },
+                TokenType::PlusEqu
+                | TokenType::MinusEqu
+                | TokenType::MultiplyEqu
+                | TokenType::DivideEqu
+                | TokenType::PercentEqu
+                | TokenType::PowerEqu => {
+                    let base = match &op_token {
+                        TokenType::PlusEqu => TokenType::Plus,
+                        TokenType::MinusEqu => TokenType::Minus,
+                        TokenType::MultiplyEqu => TokenType::Multiply,
+                        TokenType::DivideEqu => TokenType::Divide,
+                        TokenType::PercentEqu => TokenType::Percent,
+                        _ => TokenType::DMultiply,
+                    };
+                    Node {
+                        tree: Tree::Assign(
+                            Box::new(left.clone()),
+                            Box::new(Node {
+                                tree: Tree::BinOp(Box::new(left), base, Box::new(right)),
+                                loc: op_loc,
+                            }),
+                        ),
+                        loc: op_loc,
+                    }
+                }
+                TokenType::Or
+                | TokenType::And
+                | TokenType::EquEqu
+                | TokenType::NotEqu
+                | TokenType::Greater
+                | TokenType::GreatEqu
+                | TokenType::Less
+                | TokenType::LessEqu => Node {
+                    tree: Tree::CmpOp(Box::new(left), op_token.clone(), Box::new(right)),
+                    loc: op_loc,
+                },
+                _ => Node {
+                    tree: Tree::BinOp(Box::new(left), op_token.clone(), Box::new(right)),
+                    loc: op_loc,
+                },
+            };
+            self.prev_token = Token {
+                token: op_token,
+                loc: op_loc,
+            };
         }
+
         left
     }
     fn parse_block(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Node> {
@@ -513,10 +468,7 @@ impl Parser {
         iter.peek().is_some_and(|t| t.token == TokenType::FatArrow)
     }
 
-    fn parse_arrow_fn_body(
-        &mut self,
-        iter: &mut Peekable<std::slice::Iter<Token>>,
-    ) -> Vec<Node> {
+    fn parse_arrow_fn_body(&mut self, iter: &mut Peekable<std::slice::Iter<Token>>) -> Vec<Node> {
         let mut body = vec![];
         if let Some(next) = iter.peek() {
             match next.token {
@@ -741,89 +693,76 @@ impl Parser {
                     tree: Tree::Continue,
                     loc: it.loc,
                 },
-                TokenType::OpenParen => {
-                    match iter.peek() {
-                        Some(tok) if tok.token == TokenType::CloseParen => {
+                TokenType::OpenParen => match iter.peek() {
+                    Some(tok) if tok.token == TokenType::CloseParen => {
+                        iter.next();
+                        self.prev_token = it.clone();
+                        if self.is_arrow(iter) {
                             iter.next();
-                            self.prev_token = it.clone();
-                            if self.is_arrow(iter) {
-                                iter.next();
-                                let body = self.parse_arrow_fn_body(iter);
-                                Node {
-                                    tree: Tree::Fn {
-                                        name: None,
-                                        args: vec![],
-                                        body,
-                                    },
-                                    loc: it.loc,
-                                }
-                            } else {
-                                Node {
-                                    tree: Tree::Empty(),
-                                    loc: it.loc,
-                                }
+                            let body = self.parse_arrow_fn_body(iter);
+                            Node {
+                                tree: Tree::Fn {
+                                    name: None,
+                                    args: vec![],
+                                    body,
+                                },
+                                loc: it.loc,
+                            }
+                        } else {
+                            Node {
+                                tree: Tree::Empty(),
+                                loc: it.loc,
                             }
                         }
-                        _ => {
-                            let first = self.parse_expression(iter);
-                            match iter.next() {
-                                Some(tok) if tok.token == TokenType::CloseParen => {
-                                    if self.is_arrow(iter) {
-                                        iter.next();
-                                        let body = self.parse_arrow_fn_body(iter);
-                                        Node {
-                                            tree: Tree::Fn {
-                                                name: None,
-                                                args: vec![first],
-                                                body,
-                                            },
-                                            loc: it.loc,
+                    }
+                    _ => {
+                        let first = self.parse_expression(iter);
+                        match iter.next() {
+                            Some(tok) if tok.token == TokenType::CloseParen => {
+                                if self.is_arrow(iter) {
+                                    iter.next();
+                                    let body = self.parse_arrow_fn_body(iter);
+                                    Node {
+                                        tree: Tree::Fn {
+                                            name: None,
+                                            args: vec![first],
+                                            body,
+                                        },
+                                        loc: it.loc,
+                                    }
+                                } else {
+                                    first
+                                }
+                            }
+                            Some(tok) if tok.token == TokenType::Comma => {
+                                let mut args = vec![first];
+                                loop {
+                                    match iter.peek().map(|t| &t.token) {
+                                        Some(&TokenType::Comma) => {
+                                            iter.next();
                                         }
-                                    } else {
-                                        first
+                                        Some(&TokenType::CloseParen) => {
+                                            iter.next();
+                                            break;
+                                        }
+                                        Some(_) => {
+                                            args.push(self.parse_expression(iter));
+                                        }
+                                        None => break,
                                     }
                                 }
-                                Some(tok) if tok.token == TokenType::Comma => {
-                                    let mut args = vec![first];
-                                    loop {
-                                        match iter.peek().map(|t| &t.token) {
-                                            Some(&TokenType::Comma) => {
-                                                iter.next();
-                                            }
-                                            Some(&TokenType::CloseParen) => {
-                                                iter.next();
-                                                break;
-                                            }
-                                            Some(_) => {
-                                                args.push(self.parse_expression(iter));
-                                            }
-                                            None => break,
-                                        }
+                                if self.is_arrow(iter) {
+                                    iter.next();
+                                    let body = self.parse_arrow_fn_body(iter);
+                                    Node {
+                                        tree: Tree::Fn {
+                                            name: None,
+                                            args,
+                                            body,
+                                        },
+                                        loc: it.loc,
                                     }
-                                    if self.is_arrow(iter) {
-                                        iter.next();
-                                        let body = self.parse_arrow_fn_body(iter);
-                                        Node {
-                                            tree: Tree::Fn {
-                                                name: None,
-                                                args,
-                                                body,
-                                            },
-                                            loc: it.loc,
-                                        }
-                                    } else {
-                                        Logger::error(
-                                            "Expected closing parenthesis",
-                                            Some(it.loc),
-                                            ErrorType::Parsing,
-                                        );
-                                        Node {
-                                            tree: Tree::Empty(),
-                                            loc: it.loc,
-                                        }
-                                    }
-                                }
-                                _ => {
+                                } else {
                                     Logger::error(
                                         "Expected closing parenthesis",
                                         Some(it.loc),
@@ -835,9 +774,20 @@ impl Parser {
                                     }
                                 }
                             }
+                            _ => {
+                                Logger::error(
+                                    "Expected closing parenthesis",
+                                    Some(it.loc),
+                                    ErrorType::Parsing,
+                                );
+                                Node {
+                                    tree: Tree::Empty(),
+                                    loc: it.loc,
+                                }
+                            }
                         }
                     }
-                }
+                },
                 TokenType::Let => {
                     let Some(tok) = iter.next() else {
                         Logger::error(
@@ -961,9 +911,7 @@ impl Parser {
                     }
                 }
                 TokenType::Fn => {
-                    let name = if let Some(TokenType::Ident(name)) =
-                        iter.peek().map(|t| &t.token)
-                    {
+                    let name = if let Some(TokenType::Ident(name)) = iter.peek().map(|t| &t.token) {
                         self.prev_token = (*iter.peek().unwrap()).clone();
                         iter.next();
                         Some(intern(name))
@@ -976,11 +924,7 @@ impl Parser {
                         body = self.parse_arrow_fn_body(iter);
                     }
                     return Node {
-                        tree: Tree::Fn {
-                            name,
-                            args,
-                            body,
-                        },
+                        tree: Tree::Fn { name, args, body },
                         loc: it.loc,
                     };
                 }
@@ -1113,4 +1057,3 @@ impl Parser {
         }
     }
 }
-
