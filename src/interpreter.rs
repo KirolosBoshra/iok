@@ -13,6 +13,12 @@ use std::{env, fs::File, io::Read, path::Path, rc::Rc};
 // default dir name for std libs
 const STD_DIR: &str = "std";
 
+// canonicalize() returns \\?\ verbatim paths which don't resolve "..";
+// strip the prefix so the OS normalizes ParentDir normally
+fn normalize_import_path(path: &str) -> String {
+    path.trim_start_matches(r"\\?\").to_string()
+}
+
 lazy_static! {
     static ref M_SELF: u32 = intern("self");
 }
@@ -878,8 +884,7 @@ impl Interpreter {
         if cfg!(windows) {
             path_str = path_str.replace("/", "\\");
         }
-
-        path_str
+        normalize_import_path(&path_str)
     }
 
     fn flatten_path(&self, path: &Node) -> Vec<u32> {

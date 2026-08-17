@@ -1,0 +1,39 @@
+// raylib demo — bouncing ball, auto-closes after 5 seconds
+// Run from repo root: cargo run -- --std ./std/ ./examples/raylib.iok
+
+import "../extern/raylib-6.0_win64_msvc16/lib/raylib.iok" @ raylib
+
+raylib::init_window(800, 450, "IOk + raylib")
+raylib::set_target_fps(60)
+
+let bx = 100.0
+let by = 100.0
+let vx = 3.0
+let vy = 2.0
+
+while !raylib::window_should_close() {
+    bx += vx
+    by += vy
+    if bx > 780 || bx < 20 {
+        vx = 0 - vx
+    }
+    if by > 430 || by < 20 {
+        vy = 0 - vy
+    }
+
+    raylib::begin_drawing()
+    raylib::clear_background(raylib::color(20, 20, 30))
+    raylib::draw_circle(bx, by, 20, raylib::color(255, 80, 80))
+    raylib::draw_rectangle(600, 350, 160, 60, raylib::color(80, 200, 120))
+    raylib::draw_line(0, 440, 800, 440, raylib::color(200, 200, 200))
+    raylib::draw_text("Hello from IOk!", 250, 200, 30, raylib::color(255, 255, 255))
+    raylib::draw_fps(10, 10)
+    raylib::end_drawing()
+
+    if raylib::get_time() > 5 {
+        break
+    }
+}
+
+raylib::close_window()
+write("closed\n")
