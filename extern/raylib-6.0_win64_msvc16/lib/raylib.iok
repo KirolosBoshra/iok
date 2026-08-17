@@ -46,6 +46,8 @@ let is_mouse_button_down = ffi::sym(lib, "IsMouseButtonDown", "i32 -> i32")
 
 // keys (raylib KEY_*)
 let KEY_SPACE = 32
+let KEY_W = 87
+let KEY_S = 83
 let KEY_ESCAPE = 256
 let KEY_ENTER = 257
 let KEY_UP = 265
