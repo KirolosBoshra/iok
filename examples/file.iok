@@ -10,7 +10,12 @@ if file.write("Hello, World!\n") {
   exit(1)
 }
 
+io::println("exists: " + fs::exists("test.txt"))
+io::println("append: " + fs::append("test.txt", "Appended line\n"))
+
+let files = fs::list_dir(".")
+io::println("cwd entries: " + files.len())
 
 let content = file.read()
 io::println("{content}")
-
+io::println("cleanup: " + fs::delete("test.txt"))

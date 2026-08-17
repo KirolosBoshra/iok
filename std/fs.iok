@@ -35,3 +35,8 @@ fn create(path) => {
     file: file
   }
 }
+
+fn list_dir(path) => { ret __list_dir(path) }
+fn exists(path) => { ret __exists(path) }
+fn delete(path) => { ret __delete(path) }
+fn append(path, data) => { ret __append(path, data) }

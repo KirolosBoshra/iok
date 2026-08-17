@@ -2,4 +2,19 @@ import std::io
 
 let name = "IOk"
 
+fn hello(name) => {
+  ret "Hello, " + name
+}
+
+let shout = (s) => { ret s + "!" }
+let greet = fn(name) => { ret "Hello, " + name }
+
+io::println(hello(name))
+
+io::println(greet(name))
+
+io::println(shout(greet(name)))
+
+io::println(((n) => ret "Hello, " + n + "!!")(name))
+
 io::println("Hello, {name}!")

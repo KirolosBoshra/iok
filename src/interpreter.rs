@@ -78,6 +78,10 @@ impl Interpreter {
             std_native::write_file_range
         );
         register_native!(base_scope, "__create_file", std_native::create_file);
+        register_native!(base_scope, "__list_dir", std_native::list_dir);
+        register_native!(base_scope, "__exists", std_native::exists);
+        register_native!(base_scope, "__delete", std_native::delete_file);
+        register_native!(base_scope, "__append", std_native::append_file);
         register_native!(base_scope, "__socket_connect", std_native::socket_connect);
         register_native!(base_scope, "__socket_bind", std_native::socket_bind);
         register_native!(base_scope, "__socket_accept", std_native::socket_accept);
@@ -339,6 +343,10 @@ impl Interpreter {
                     self.interpret(var).get_list_index(index_num)
                 }
             }
+            Tree::ImmCall { callee, args } => {
+                let obj = self.interpret(callee);
+                self.call_function(&obj, args, None)
+            }
             Tree::Ret(expr) => Object::Ret(Box::new(self.interpret(expr))),
             Tree::Break => Object::Break,
             Tree::Continue => Object::Continue,
@@ -421,11 +429,13 @@ impl Interpreter {
 
                 // Create and set the function object in the environment
                 let function = Object::Fn {
-                    name: *name,
+                    name: name.unwrap_or_else(|| intern("")),
                     args: args_names,
                     body: Rc::new(body.to_vec()),
                 };
-                self.set_var(*name, function.clone());
+                if let Some(n) = name {
+                    self.set_var(*n, function.clone());
+                }
                 function
             }
 
@@ -560,7 +570,7 @@ impl Interpreter {
 
                 methods.iter().for_each(|method| {
                     if let Tree::Fn {
-                        name,
+                        name: Some(name),
                         args: _,
                         body: _,
                     } = &method.tree

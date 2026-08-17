@@ -169,6 +169,47 @@ pub fn create_file(args: Vec<Object>, _: &mut Interpreter) -> Object {
     }
 }
 
+pub fn list_dir(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::String(path)) = args.get(0) {
+        let entries = std::fs::read_dir(&**path)
+            .map(|dir| {
+                dir.filter_map(|e| e.ok())
+                    .map(|e| Object::String(Rc::new(e.file_name().to_string_lossy().to_string())))
+                    .collect::<Vec<Object>>()
+            })
+            .ok();
+        return entries.map(Object::List).unwrap_or(Object::Null);
+    }
+    Object::Null
+}
+
+pub fn exists(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::String(path)) = args.get(0) {
+        return Object::Bool(std::path::Path::new(&**path).exists());
+    }
+    Object::Null
+}
+
+pub fn delete_file(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::String(path)) = args.get(0) {
+        return Object::Bool(std::fs::remove_file(&**path).is_ok());
+    }
+    Object::Null
+}
+
+pub fn append_file(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::String(path)), Some(Object::String(data))) = (args.get(0), args.get(1)) {
+        use std::io::Write;
+        let result = std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&**path)
+            .and_then(|mut f| f.write_all(data.as_bytes()));
+        return Object::Bool(result.is_ok());
+    }
+    Object::Null
+}
+
 pub fn socket_connect(args: Vec<Object>, _: &mut Interpreter) -> Object {
     if let (Some(Object::String(address)), Some(Object::Number(port))) = (args.get(0), args.get(1))
     {

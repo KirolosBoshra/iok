@@ -2,3 +2,10 @@
 import "io.iok" @ io
 import "fs.iok" @ fs
 import "net.iok" @ net
+
+fn assert(cond, msg) => {
+  if !cond {
+    write("Assert failed: " + msg + "\n")
+    exit(1)
+  }
+}

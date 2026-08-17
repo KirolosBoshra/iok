@@ -19,6 +19,10 @@ pub enum Tree {
     List(Vec<Node>),
     Ident(u32),
     Empty(),
+    ImmCall {
+        callee: Box<Node>,
+        args: Vec<Node>,
+    },
     ListCall(Box<Node>, Box<Node>),
     FnCall {
         name: u32,
@@ -62,7 +66,7 @@ pub enum Tree {
         els: Vec<Node>,
     },
     Fn {
-        name: u32,
+        name: Option<u32>,
         args: Vec<Node>,
         body: Vec<Node>,
     },
@@ -332,6 +336,20 @@ impl Parser {
                         }
                     }
                 }
+                TokenType::OpenParen => {
+                    if matches!(&left.tree, Tree::Fn { name: None, .. }) {
+                        let args = self.parse_args(iter);
+                        left = Node {
+                            tree: Tree::ImmCall {
+                                callee: Box::new(left),
+                                args,
+                            },
+                            loc: op.loc,
+                        };
+                    } else {
+                        break;
+                    }
+                }
                 TokenType::Dot | TokenType::DColon => {
                     iter.next();
                     let member = Box::new(self.parse_factor(iter));
@@ -489,6 +507,24 @@ impl Parser {
         } else {
             vec![]
         }
+    }
+
+    fn is_arrow(&self, iter: &mut Peekable<std::slice::Iter<Token>>) -> bool {
+        iter.peek().is_some_and(|t| t.token == TokenType::FatArrow)
+    }
+
+    fn parse_arrow_fn_body(
+        &mut self,
+        iter: &mut Peekable<std::slice::Iter<Token>>,
+    ) -> Vec<Node> {
+        let mut body = vec![];
+        if let Some(next) = iter.peek() {
+            match next.token {
+                TokenType::OpenCurly => body = self.parse_block(iter),
+                _ => body.push(self.parse_expression(iter)),
+            }
+        }
+        body
     }
 
     fn parse_struct_body(
@@ -705,33 +741,103 @@ impl Parser {
                     tree: Tree::Continue,
                     loc: it.loc,
                 },
-                TokenType::OpenParen => match iter.peek() {
-                    Some(tok) if tok.token == TokenType::CloseParen => {
-                        iter.next();
-                        self.prev_token = it.clone();
-                        Node {
-                            tree: Tree::Empty(),
-                            loc: it.loc,
-                        }
-                    }
-                    _ => {
-                        let expr = self.parse_expression(iter);
-                        match iter.next() {
-                            Some(tok) if tok.token == TokenType::CloseParen => expr,
-                            _ => {
-                                Logger::error(
-                                    "Expected closing parenthesis",
-                                    Some(it.loc),
-                                    ErrorType::Parsing,
-                                );
+                TokenType::OpenParen => {
+                    match iter.peek() {
+                        Some(tok) if tok.token == TokenType::CloseParen => {
+                            iter.next();
+                            self.prev_token = it.clone();
+                            if self.is_arrow(iter) {
+                                iter.next();
+                                let body = self.parse_arrow_fn_body(iter);
+                                Node {
+                                    tree: Tree::Fn {
+                                        name: None,
+                                        args: vec![],
+                                        body,
+                                    },
+                                    loc: it.loc,
+                                }
+                            } else {
                                 Node {
                                     tree: Tree::Empty(),
                                     loc: it.loc,
                                 }
                             }
                         }
+                        _ => {
+                            let first = self.parse_expression(iter);
+                            match iter.next() {
+                                Some(tok) if tok.token == TokenType::CloseParen => {
+                                    if self.is_arrow(iter) {
+                                        iter.next();
+                                        let body = self.parse_arrow_fn_body(iter);
+                                        Node {
+                                            tree: Tree::Fn {
+                                                name: None,
+                                                args: vec![first],
+                                                body,
+                                            },
+                                            loc: it.loc,
+                                        }
+                                    } else {
+                                        first
+                                    }
+                                }
+                                Some(tok) if tok.token == TokenType::Comma => {
+                                    let mut args = vec![first];
+                                    loop {
+                                        match iter.peek().map(|t| &t.token) {
+                                            Some(&TokenType::Comma) => {
+                                                iter.next();
+                                            }
+                                            Some(&TokenType::CloseParen) => {
+                                                iter.next();
+                                                break;
+                                            }
+                                            Some(_) => {
+                                                args.push(self.parse_expression(iter));
+                                            }
+                                            None => break,
+                                        }
+                                    }
+                                    if self.is_arrow(iter) {
+                                        iter.next();
+                                        let body = self.parse_arrow_fn_body(iter);
+                                        Node {
+                                            tree: Tree::Fn {
+                                                name: None,
+                                                args,
+                                                body,
+                                            },
+                                            loc: it.loc,
+                                        }
+                                    } else {
+                                        Logger::error(
+                                            "Expected closing parenthesis",
+                                            Some(it.loc),
+                                            ErrorType::Parsing,
+                                        );
+                                        Node {
+                                            tree: Tree::Empty(),
+                                            loc: it.loc,
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    Logger::error(
+                                        "Expected closing parenthesis",
+                                        Some(it.loc),
+                                        ErrorType::Parsing,
+                                    );
+                                    Node {
+                                        tree: Tree::Empty(),
+                                        loc: it.loc,
+                                    }
+                                }
+                            }
+                        }
                     }
-                },
+                }
                 TokenType::Let => {
                     let Some(tok) = iter.next() else {
                         Logger::error(
@@ -855,34 +961,28 @@ impl Parser {
                     }
                 }
                 TokenType::Fn => {
-                    if let Some(TokenType::Ident(name)) =
-                        self.expect_token(iter, TokenType::Ident(String::new()))
+                    let name = if let Some(TokenType::Ident(name)) =
+                        iter.peek().map(|t| &t.token)
                     {
-                        let args = self.parse_args(iter);
-                        let mut body = vec![];
-                        if self.expect_token(iter, TokenType::FatArrow).is_some() {
-                            if let Some(next) = iter.peek() {
-                                match next.token {
-                                    TokenType::OpenCurly => {
-                                        body = self.parse_block(iter);
-                                    }
-                                    _ => body.push(self.parse_expression(iter)),
-                                }
-                            }
-                        }
-                        return Node {
-                            tree: Tree::Fn {
-                                name: intern(&name),
-                                args,
-                                body,
-                            },
-                            loc: it.loc,
-                        };
+                        self.prev_token = (*iter.peek().unwrap()).clone();
+                        iter.next();
+                        Some(intern(name))
+                    } else {
+                        None
                     };
-                    Node {
-                        tree: Tree::Empty(),
-                        loc: it.loc,
+                    let args = self.parse_args(iter);
+                    let mut body = vec![];
+                    if self.expect_token(iter, TokenType::FatArrow).is_some() {
+                        body = self.parse_arrow_fn_body(iter);
                     }
+                    return Node {
+                        tree: Tree::Fn {
+                            name,
+                            args,
+                            body,
+                        },
+                        loc: it.loc,
+                    };
                 }
 
                 TokenType::Struct => {
@@ -937,12 +1037,7 @@ impl Parser {
                         if self.expect_token(iter, TokenType::FatArrow).is_none() {
                             break;
                         }
-                        if let Some(next) = iter.peek() {
-                            match next.token {
-                                TokenType::OpenCurly => body = self.parse_block(iter),
-                                _ => body.push(self.parse_expression(iter)),
-                            }
-                        }
+                        body = self.parse_arrow_fn_body(iter);
                         if patterns
                             .iter()
                             .any(|p| matches!(&p.tree, Tree::Ident(id) if *id == intern("_")))
