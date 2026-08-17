@@ -12,6 +12,24 @@ let vx = 3.0
 let vy = 2.0
 
 while !raylib::window_should_close() {
+    // keyboard: arrows move the ball, space boosts it
+    if raylib::is_key_down(raylib::KEY_LEFT) {
+        bx -= 5
+    }
+    if raylib::is_key_down(raylib::KEY_RIGHT) {
+        bx += 5
+    }
+    if raylib::is_key_down(raylib::KEY_UP) {
+        by -= 5
+    }
+    if raylib::is_key_down(raylib::KEY_DOWN) {
+        by += 5
+    }
+    if raylib::is_key_down(raylib::KEY_SPACE) {
+        vx = vx * 1.5
+        vy = vy * 1.5
+    }
+
     bx += vx
     by += vy
     if bx > 780 || bx < 20 {
@@ -28,6 +46,16 @@ while !raylib::window_should_close() {
     raylib::draw_line(0, 440, 800, 440, raylib::color(200, 200, 200))
     raylib::draw_text("Hello from IOk!", 250, 200, 30, raylib::color(255, 255, 255))
     raylib::draw_fps(10, 10)
+
+    // mouse: red dot follows the cursor, left click makes it big
+    let mx = raylib::get_mouse_x()
+    let my = raylib::get_mouse_y()
+    if raylib::is_mouse_button_down(raylib::MOUSE_LEFT) {
+        raylib::draw_circle(mx, my, 12, raylib::color(255, 255, 0))
+    } els {
+        raylib::draw_circle(mx, my, 5, raylib::color(255, 255, 0))
+    }
+
     raylib::end_drawing()
 
     if raylib::get_time() > 5 {
