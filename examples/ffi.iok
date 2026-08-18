@@ -38,3 +38,10 @@ if gettimeofday != null {
         io::println("no time function found")
     }
 }
+
+// struct member sugar: read/write C struct fields like language fields
+ffi::def_struct("Point2", "x:f32, y:f32")
+let p = ffi::struct_val("Point2", [2, 3])
+io::println("p.x=" + p.x + " p.y=" + p.y)
+p.y = 99
+io::println("after p.y = 99: p.y=" + p.y)
