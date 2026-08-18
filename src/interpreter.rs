@@ -406,9 +406,19 @@ impl Interpreter {
                             var_obj.set_list_index(index_num, value_obj.clone());
                         }
                     }
-                    Tree::MemberAccess { .. } => {
-                        let field = self.interpret_mut(var).unwrap();
-                        *field = value_obj.clone();
+                    Tree::MemberAccess { target, member } => {
+                        if let Some(slot) = self.interpret_mut(target) {
+                            if matches!(slot, Object::CStruct { .. }) {
+                                if let Tree::Ident(name) = &member.tree {
+                                    let updated = ffi::set_struct_field(slot, *name, &value_obj);
+                                    *slot = updated;
+                                }
+                            } else if let Tree::Ident(name) = &member.tree {
+                                if let Some(field) = slot.get_field_mut(name) {
+                                    *field = value_obj.clone();
+                                }
+                            }
+                        }
                     }
 
                     _ => {}
@@ -634,6 +644,9 @@ impl Interpreter {
                 match &member.tree {
                     Tree::Ident(name) => {
                         let target_object = self.interpret(target);
+                        if matches!(target_object, Object::CStruct { .. }) {
+                            return ffi::struct_field(&target_object, *name);
+                        }
                         return target_object
                             .get_field(name)
                             .unwrap_or(&Object::Null)

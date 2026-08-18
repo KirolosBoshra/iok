@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use libffi::middle::{Cif, Type};
 use libffi::raw::ffi_call;
 use rustc_hash::FxHashMap;
-use std::alloc::{alloc, dealloc, Layout};
+use std::alloc::{alloc, alloc_zeroed, dealloc, Layout};
 use std::ffi::{CStr, CString, c_char};
 use std::os::raw::c_void;
 use std::rc::Rc;
@@ -181,6 +181,12 @@ impl AlignedBuf {
     fn new(size: usize, align: usize) -> Self {
         let layout = Layout::from_size_align(size.max(1), align).expect("bad layout");
         let ptr = unsafe { alloc(layout) };
+        AlignedBuf { ptr, layout }
+    }
+
+    fn zeroed(size: usize, align: usize) -> Self {
+        let layout = Layout::from_size_align(size.max(1), align).expect("bad layout");
+        let ptr = unsafe { alloc_zeroed(layout) };
         AlignedBuf { ptr, layout }
     }
 
@@ -375,9 +381,39 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                     buf.copy_from(bytes);
                     avalue.push(buf.as_ptr());
                     bufs.push(buf);
+                } else if let Object::Instance { fields, .. } = a {
+                    // pass a language struct: marshaled field-by-field into the C struct
+                    let buf = AlignedBuf::zeroed(l.size, l.align);
+                    for (fname, t, off) in &l.fields {
+                        let val = fields.get(fname);
+                        match val {
+                            Some(v) => {
+                                let mut strings = vec![];
+                                let dst = unsafe { buf.ptr.add(*off) };
+                                if let Err(e) = marshal_scalar(t, v, dst, &mut strings) {
+                                    Logger::error(
+                                        &format!("bad struct field: {e}"),
+                                        None,
+                                        ErrorType::RunTime,
+                                    );
+                                    return Object::Null;
+                                }
+                            }
+                            None => {
+                                Logger::error(
+                                    "struct argument missing a required field",
+                                    None,
+                                    ErrorType::RunTime,
+                                );
+                                return Object::Null;
+                            }
+                        }
+                    }
+                    avalue.push(buf.as_ptr());
+                    bufs.push(buf);
                 } else {
                     Logger::error(
-                        "expected CStruct for struct argument",
+                        "expected CStruct or Instance for struct argument",
                         None,
                         ErrorType::RunTime,
                     );

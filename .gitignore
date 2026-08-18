@@ -2,3 +2,5 @@
 Cargo.lock
 /.idea
 flamegraph.svg
+*.dll
+*.lib

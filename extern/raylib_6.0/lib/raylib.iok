@@ -1,9 +1,9 @@
 // raylib wrapper for IOk — thin FFI bindings for raylib.dll
-// Loads ./extern/raylib-6.0_win64_msvc16/lib/raylib.dll (repo root), falls back to bare "raylib.dll" (PATH / exe dir)
+// Loads ./extern/raylib_6.0/lib/raylib.dll (repo root), falls back to bare "raylib.dll" (PATH / exe dir)
 
 import std::ffi
 
-let lib = ffi::load("./extern/raylib-6.0_win64_msvc16/lib/raylib.dll")
+let lib = ffi::load("./extern/raylib_6.0/lib/raylib.dll")
 if lib == null {
     lib = ffi::load("raylib.dll")
 }
@@ -33,6 +33,7 @@ let begin_drawing = ffi::sym(lib, "BeginDrawing", "-> void")
 let end_drawing = ffi::sym(lib, "EndDrawing", "-> void")
 let clear_background = ffi::sym(lib, "ClearBackground", "Color -> void")
 let draw_circle = ffi::sym(lib, "DrawCircle", "i32, i32, f32, Color -> void")
+let draw_circle_v = ffi::sym(lib, "DrawCircleV", "Vector2, f32, Color -> void")
 let draw_rectangle = ffi::sym(lib, "DrawRectangle", "i32, i32, i32, i32, Color -> void")
 let draw_line = ffi::sym(lib, "DrawLine", "i32, i32, i32, i32, Color -> void")
 let draw_text = ffi::sym(lib, "DrawText", "str, i32, i32, i32, Color -> void")
@@ -40,12 +41,14 @@ let draw_fps = ffi::sym(lib, "DrawFPS", "i32, i32 -> void")
 
 // input
 let is_key_down = ffi::sym(lib, "IsKeyDown", "i32 -> i32")
+let is_key_pressed = ffi::sym(lib, "IsKeyPressed", "i32 -> i32")
 let get_mouse_x = ffi::sym(lib, "GetMouseX", "-> i32")
 let get_mouse_y = ffi::sym(lib, "GetMouseY", "-> i32")
 let is_mouse_button_down = ffi::sym(lib, "IsMouseButtonDown", "i32 -> i32")
 
 // keys (raylib KEY_*)
 let KEY_SPACE = 32
+let KEY_TAB = 258
 let KEY_W = 87
 let KEY_S = 83
 let KEY_ESCAPE = 256
