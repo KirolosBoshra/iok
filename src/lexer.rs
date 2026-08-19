@@ -97,6 +97,7 @@ pub enum TokenType {
 pub struct Loc {
     pub x: usize,
     pub y: usize,
+    pub src: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +115,11 @@ impl<'a> Lexer<'a> {
     pub fn new(input: &'a String) -> Lexer<'a> {
         let iter = input.chars().peekable();
         Lexer {
-            curr_loc: Loc { x: 1, y: 1 },
+            curr_loc: Loc {
+                x: 1,
+                y: 1,
+                src: Logger::current_source_id(),
+            },
             iter,
         }
     }

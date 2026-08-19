@@ -1,4 +1,5 @@
-use crate::interner::intern;
+use crate::interner::{intern, resolve};
+use crate::lexer::Loc;
 use crate::logger::{ErrorType, Logger};
 use crate::object::Object;
 use lazy_static::lazy_static;
@@ -168,6 +169,25 @@ fn to_ffi_type(t: &FType) -> Type {
     }
 }
 
+fn type_name(t: &FType) -> String {
+    match t {
+        FType::I8 => "i8".into(),
+        FType::I16 => "i16".into(),
+        FType::I32 => "i32".into(),
+        FType::I64 => "i64".into(),
+        FType::U8 => "u8".into(),
+        FType::U16 => "u16".into(),
+        FType::U32 => "u32".into(),
+        FType::U64 => "u64".into(),
+        FType::F32 => "f32".into(),
+        FType::F64 => "f64".into(),
+        FType::Str => "str".into(),
+        FType::Ptr => "ptr".into(),
+        FType::Struct(l) => resolve(l.name),
+        FType::StructPtr(l) => format!("*{}", resolve(l.name)),
+    }
+}
+
 // 16-aligned scratch cells for scalar/pointer args and returns
 #[repr(C, align(16))]
 struct Cell([u8; 64]);
@@ -306,7 +326,12 @@ pub fn struct_field(obj: &Object, fname: u32) -> Object {
     Object::Null
 }
 
-pub fn set_struct_field(obj: &Object, fname: u32, value: &Object) -> Object {
+pub fn set_struct_field(
+    obj: &Object,
+    fname: u32,
+    value: &Object,
+    loc: Option<Loc>,
+) -> Object {
     if let Object::CStruct { layout, bytes } = obj {
         for (name, t, off) in &layout.fields {
             if *name == fname {
@@ -319,7 +344,11 @@ pub fn set_struct_field(obj: &Object, fname: u32, value: &Object) -> Object {
                         }
                     }
                     Err(e) => {
-                        Logger::error(&format!("set_field: {e}"), None, ErrorType::RunTime);
+                        Logger::error(
+                            &format!("set_field '{}' ({}): {e}", resolve(fname), type_name(t)),
+                            loc,
+                            ErrorType::RunTime,
+                        );
                         return Object::Null;
                     }
                 }
@@ -329,15 +358,16 @@ pub fn set_struct_field(obj: &Object, fname: u32, value: &Object) -> Object {
     Object::Null
 }
 
-fn check_struct_size(bytes: &[u8], l: &CLayout) -> bool {
+fn check_struct_size(bytes: &[u8], l: &CLayout, loc: Option<Loc>) -> bool {
     if bytes.len() != l.size {
         Logger::error(
             &format!(
-                "struct size mismatch: expected {}, got {}",
+                "struct '{}' size mismatch: expected {}, got {}",
+                resolve(l.name),
                 l.size,
                 bytes.len()
             ),
-            None,
+            loc,
             ErrorType::RunTime,
         );
         return false;
@@ -345,7 +375,12 @@ fn check_struct_size(bytes: &[u8], l: &CLayout) -> bool {
     true
 }
 
-pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Object {
+pub fn call_foreign(
+    sig: &ParsedSig,
+    symbol: *mut c_void,
+    args: &[Object],
+    loc: Option<Loc>,
+) -> Object {
     if args.len() != sig.args.len() {
         Logger::error(
             &format!("Expected {} args, got {}", sig.args.len(), args.len()),
@@ -368,11 +403,11 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
     let mut bufs: Vec<AlignedBuf> = vec![];
     let mut avalue: Vec<*mut c_void> = vec![];
 
-    for (t, a) in sig.args.iter().zip(args) {
+    for (i, (t, a)) in sig.args.iter().zip(args).enumerate() {
         match t {
             FType::Struct(l) => {
                 if let Object::CStruct { bytes, .. } = a {
-                    if !check_struct_size(bytes, l) {
+                    if !check_struct_size(bytes, l, loc) {
                         return Object::Null;
                     }
                     let mut buf = AlignedBuf::new(l.size, l.align);
@@ -390,8 +425,12 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                                 let dst = unsafe { buf.ptr.add(*off) };
                                 if let Err(e) = marshal_scalar(t, v, dst, &mut strings) {
                                     Logger::error(
-                                        &format!("bad struct field: {e}"),
-                                        None,
+                                        &format!(
+                                            "bad struct field '{}' ({}): {e}",
+                                            resolve(*fname),
+                                            type_name(t)
+                                        ),
+                                        loc,
                                         ErrorType::RunTime,
                                     );
                                     return Object::Null;
@@ -399,8 +438,11 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                             }
                             None => {
                                 Logger::error(
-                                    "struct argument missing a required field",
-                                    None,
+                                    &format!(
+                                        "struct argument missing required field '{}'",
+                                        resolve(*fname)
+                                    ),
+                                    loc,
                                     ErrorType::RunTime,
                                 );
                                 return Object::Null;
@@ -411,8 +453,12 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                     bufs.push(buf);
                 } else {
                     Logger::error(
-                        "expected CStruct or Instance for struct argument",
-                        None,
+                        &format!(
+                            "expected CStruct or Instance for struct argument {} ({})",
+                            i + 1,
+                            type_name(t)
+                        ),
+                        loc,
                         ErrorType::RunTime,
                     );
                     return Object::Null;
@@ -423,7 +469,7 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                 let ptr = cell.0.as_mut_ptr();
                 match a {
                     Object::CStruct { bytes, .. } => {
-                        if !check_struct_size(bytes, l) {
+                        if !check_struct_size(bytes, l, loc) {
                             return Object::Null;
                         }
                         unsafe { *(ptr as *mut *const u8) = bytes.as_ptr() };
@@ -431,8 +477,12 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                     Object::Ptr(p) => unsafe { *(ptr as *mut *mut c_void) = *p },
                     _ => {
                         Logger::error(
-                            "expected CStruct or Ptr for struct pointer argument",
-                            None,
+                            &format!(
+                                "expected CStruct or Ptr for struct pointer argument {} ({})",
+                                i + 1,
+                                type_name(t)
+                            ),
+                            loc,
                             ErrorType::RunTime,
                         );
                         return Object::Null;
@@ -445,7 +495,11 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                 let mut cell = Box::new(Cell([0u8; 64]));
                 let ptr = cell.0.as_mut_ptr();
                 if let Err(e) = marshal_scalar(t, a, ptr, &mut strings) {
-                    Logger::error(&format!("bad argument: {e}"), None, ErrorType::RunTime);
+                    Logger::error(
+                        &format!("bad argument {} ({}): {e}", i + 1, type_name(t)),
+                        loc,
+                        ErrorType::RunTime,
+                    );
                     return Object::Null;
                 }
                 avalue.push(ptr as *mut c_void);

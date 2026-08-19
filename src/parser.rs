@@ -96,7 +96,7 @@ impl Parser {
             tokens,
             prev_token: Token {
                 token: TokenType::Null,
-                loc: Loc { x: 0, y: 0 },
+                loc: Loc { x: 0, y: 0, src: 0 },
             },
         }
     }

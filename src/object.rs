@@ -292,7 +292,14 @@ impl Object {
                 }
                 Object::Null
             }
-            _ => Object::Null,
+            _ => {
+                Logger::error(
+                    &format!("Undefined method: {}", resolve(name)),
+                    Some(loc),
+                    ErrorType::RunTime,
+                );
+                Object::Null
+            }
         }
     }
 
