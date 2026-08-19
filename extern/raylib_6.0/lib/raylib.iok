@@ -13,50 +13,281 @@ if lib == null {
     exit(1)
 }
 
+// structs (layouts match raylib 6.0; numeric fields only)
 ffi::def_struct("Color", "r:u8, g:u8, b:u8, a:u8")
 ffi::def_struct("Vector2", "x:f32, y:f32")
+ffi::def_struct("Vector3", "x:f32, y:f32, z:f32")
+ffi::def_struct("Vector4", "x:f32, y:f32, z:f32, w:f32")
+ffi::def_struct("Rectangle", "x:f32, y:f32, width:f32, height:f32")
+ffi::def_struct("Texture2D", "id:u32, width:i32, height:i32, mipmaps:i32, format:i32")
 
 fn color(r, g, b, a=255) => ret ffi::struct_val("Color", [r, g, b, a])
 fn vec2(x, y) => ret ffi::struct_val("Vector2", [x, y])
+fn vec3(x, y, z) => ret ffi::struct_val("Vector3", [x, y, z])
+fn vec4(x, y, z, w) => ret ffi::struct_val("Vector4", [x, y, z, w])
+fn rect(x, y, w, h) => ret ffi::struct_val("Rectangle", [x, y, w, h])
+
+// constants
+let PI = 3.141592653589793
+let DEG2RAD = PI / 180
+let RAD2DEG = 180 / PI
+
+// color presets
+let LIGHTGRAY = color(200, 200, 200)
+let GRAY = color(130, 130, 130)
+let DARKGRAY = color(80, 80, 80)
+let YELLOW = color(253, 249, 0)
+let GOLD = color(255, 203, 0)
+let ORANGE = color(255, 161, 0)
+let PINK = color(255, 109, 194)
+let RED = color(230, 41, 55)
+let MAROON = color(190, 33, 55)
+let GREEN = color(0, 228, 48)
+let LIME = color(0, 158, 47)
+let DARKGREEN = color(0, 117, 44)
+let SKYBLUE = color(102, 191, 255)
+let BLUE = color(0, 121, 241)
+let DARKBLUE = color(0, 82, 172)
+let PURPLE = color(200, 122, 255)
+let VIOLET = color(135, 60, 190)
+let DARKPURPLE = color(112, 31, 126)
+let BEIGE = color(211, 176, 131)
+let BROWN = color(127, 106, 79)
+let DARKBROWN = color(76, 63, 47)
+let WHITE = color(255, 255, 255)
+let BLACK = color(0, 0, 0)
+let BLANK = color(0, 0, 0, 0)
+let MAGENTA = color(255, 0, 255)
+let RAYWHITE = color(245, 245, 245)
+
+// window (raylib WINDOW_* / FLAG_* config flags)
+let FLAG_VSYNC_HINT = 64
+let FLAG_FULLSCREEN_MODE = 128
+let FLAG_WINDOW_RESIZABLE = 256
+let FLAG_WINDOW_UNDECORATED = 512
+let FLAG_WINDOW_HIDDEN = 1024
+let FLAG_WINDOW_MINIMIZED = 2048
+let FLAG_WINDOW_MAXIMIZED = 4096
+let FLAG_WINDOW_UNFOCUSED = 8192
+let FLAG_WINDOW_TOPMOST = 16384
+let FLAG_WINDOW_HIGHDPI = 32768
+let FLAG_WINDOW_ALWAYS_RUN = 65536
+let FLAG_MSAA_4X_HINT = 131072
+let FLAG_INTERLACED_HINT = 262144
+
+// keys (raylib KEY_*)
+let KEY_NULL = 0
+let KEY_SPACE = 32
+let KEY_APOSTROPHE = 39
+let KEY_COMMA = 44
+let KEY_MINUS = 45
+let KEY_PERIOD = 46
+let KEY_SLASH = 47
+let KEY_ZERO = 48
+let KEY_ONE = 49
+let KEY_TWO = 50
+let KEY_THREE = 51
+let KEY_FOUR = 52
+let KEY_FIVE = 53
+let KEY_SIX = 54
+let KEY_SEVEN = 55
+let KEY_EIGHT = 56
+let KEY_NINE = 57
+let KEY_SEMICOLON = 59
+let KEY_EQUAL = 61
+let KEY_A = 65
+let KEY_B = 66
+let KEY_C = 67
+let KEY_D = 68
+let KEY_E = 69
+let KEY_F = 70
+let KEY_G = 71
+let KEY_H = 72
+let KEY_I = 73
+let KEY_J = 74
+let KEY_K = 75
+let KEY_L = 76
+let KEY_M = 77
+let KEY_N = 78
+let KEY_O = 79
+let KEY_P = 80
+let KEY_Q = 81
+let KEY_R = 82
+let KEY_S = 83
+let KEY_T = 84
+let KEY_U = 85
+let KEY_V = 86
+let KEY_W = 87
+let KEY_X = 88
+let KEY_Y = 89
+let KEY_Z = 90
+let KEY_LEFT_BRACKET = 91
+let KEY_BACKSLASH = 92
+let KEY_RIGHT_BRACKET = 93
+let KEY_GRAVE = 96
+let KEY_ESCAPE = 256
+let KEY_ENTER = 257
+let KEY_TAB = 258
+let KEY_BACKSPACE = 259
+let KEY_INSERT = 260
+let KEY_DELETE = 261
+let KEY_RIGHT = 262
+let KEY_LEFT = 263
+let KEY_DOWN = 264
+let KEY_UP = 265
+let KEY_PAGE_UP = 266
+let KEY_PAGE_DOWN = 267
+let KEY_HOME = 268
+let KEY_END = 269
+let KEY_CAPS_LOCK = 280
+let KEY_SCROLL_LOCK = 281
+let KEY_NUM_LOCK = 282
+let KEY_PRINT_SCREEN = 283
+let KEY_PAUSE = 284
+let KEY_F1 = 290
+let KEY_F2 = 291
+let KEY_F3 = 292
+let KEY_F4 = 293
+let KEY_F5 = 294
+let KEY_F6 = 295
+let KEY_F7 = 296
+let KEY_F8 = 297
+let KEY_F9 = 298
+let KEY_F10 = 299
+let KEY_F11 = 300
+let KEY_F12 = 301
+let KEY_LEFT_SHIFT = 340
+let KEY_LEFT_CONTROL = 341
+let KEY_LEFT_ALT = 342
+let KEY_LEFT_SUPER = 343
+let KEY_RIGHT_SHIFT = 344
+let KEY_RIGHT_CONTROL = 345
+let KEY_RIGHT_ALT = 346
+let KEY_RIGHT_SUPER = 347
+let KEY_KB_MENU = 348
+
+// mouse buttons (raylib MOUSE_BUTTON_*)
+let MOUSE_BUTTON_LEFT = 0
+let MOUSE_BUTTON_RIGHT = 1
+let MOUSE_BUTTON_MIDDLE = 2
+let MOUSE_BUTTON_SIDE = 3
+let MOUSE_BUTTON_EXTRA = 4
+let MOUSE_BUTTON_FORWARD = 5
+let MOUSE_BUTTON_BACK = 6
+let MOUSE_LEFT = MOUSE_BUTTON_LEFT
+
+// mouse cursors (raylib MOUSE_CURSOR_*)
+let MOUSE_CURSOR_DEFAULT = 0
+let MOUSE_CURSOR_ARROW = 1
+let MOUSE_CURSOR_IBEAM = 2
+let MOUSE_CURSOR_CROSSHAIR = 3
+let MOUSE_CURSOR_POINTING_HAND = 4
+let MOUSE_CURSOR_RESIZE_EW = 5
+let MOUSE_CURSOR_RESIZE_NS = 6
+let MOUSE_CURSOR_RESIZE_NWSE = 7
+let MOUSE_CURSOR_RESIZE_NESW = 8
+let MOUSE_CURSOR_RESIZE_ALL = 9
+let MOUSE_CURSOR_NOT_ALLOWED = 10
+
+// texture filters (raylib TEXTURE_FILTER_*)
+let TEXTURE_FILTER_POINT = 0
+let TEXTURE_FILTER_BILINEAR = 1
+let TEXTURE_FILTER_TRILINEAR = 2
+let TEXTURE_FILTER_ANISOTROPIC_4X = 3
+let TEXTURE_FILTER_ANISOTROPIC_8X = 4
+let TEXTURE_FILTER_ANISOTROPIC_16X = 5
+
+// blend modes (raylib BLEND_*)
+let BLEND_ALPHA = 0
+let BLEND_ADDITIVE = 1
+let BLEND_MULTIPLIED = 2
+let BLEND_ADD_COLORS = 3
+let BLEND_SUBTRACT_COLORS = 4
+let BLEND_ALPHA_PREMULTIPLY = 5
+let BLEND_CUSTOM = 6
+let BLEND_SEPARATE_ALPHA = 7
+let BLEND_MULTIPLY_RGB = 8
+let BLEND_MULTIPLY_ALPHA = 9
 
 // window
+let set_config_flags = ffi::sym(lib, "SetConfigFlags", "u32 -> void")
 let init_window = ffi::sym(lib, "InitWindow", "i32, i32, str -> void")
+let is_window_ready = ffi::sym(lib, "IsWindowReady", "-> i32")
 let window_should_close = ffi::sym(lib, "WindowShouldClose", "-> i32")
 let close_window = ffi::sym(lib, "CloseWindow", "-> void")
+let set_window_size = ffi::sym(lib, "SetWindowSize", "i32, i32 -> void")
+let set_window_position = ffi::sym(lib, "SetWindowPosition", "i32, i32 -> void")
+let set_window_title = ffi::sym(lib, "SetWindowTitle", "str -> void")
+let toggle_fullscreen = ffi::sym(lib, "ToggleFullscreen", "-> void")
+let is_window_resized = ffi::sym(lib, "IsWindowResized", "-> i32")
+let set_exit_key = ffi::sym(lib, "SetExitKey", "i32 -> void")
 let set_target_fps = ffi::sym(lib, "SetTargetFPS", "i32 -> void")
+let get_fps = ffi::sym(lib, "GetFPS", "-> i32")
+let get_frame_time = ffi::sym(lib, "GetFrameTime", "-> f32")
+let get_time = ffi::sym(lib, "GetTime", "-> f64")
 let screen_width = ffi::sym(lib, "GetScreenWidth", "-> i32")
 let screen_height = ffi::sym(lib, "GetScreenHeight", "-> i32")
-let get_time = ffi::sym(lib, "GetTime", "-> f64")
 
-// drawing
+// drawing / shapes
 let begin_drawing = ffi::sym(lib, "BeginDrawing", "-> void")
 let end_drawing = ffi::sym(lib, "EndDrawing", "-> void")
 let clear_background = ffi::sym(lib, "ClearBackground", "Color -> void")
 let draw_circle = ffi::sym(lib, "DrawCircle", "i32, i32, f32, Color -> void")
 let draw_circle_v = ffi::sym(lib, "DrawCircleV", "Vector2, f32, Color -> void")
+let draw_circle_lines = ffi::sym(lib, "DrawCircleLines", "i32, i32, f32, Color -> void")
+let draw_circle_lines_v = ffi::sym(lib, "DrawCircleLinesV", "Vector2, f32, Color -> void")
+let draw_ellipse = ffi::sym(lib, "DrawEllipse", "i32, i32, f32, f32, Color -> void")
 let draw_rectangle = ffi::sym(lib, "DrawRectangle", "i32, i32, i32, i32, Color -> void")
+let draw_rectangle_v = ffi::sym(lib, "DrawRectangleV", "Vector2, Vector2, Color -> void")
+let draw_rectangle_rec = ffi::sym(lib, "DrawRectangleRec", "Rectangle, Color -> void")
+let draw_rectangle_lines = ffi::sym(lib, "DrawRectangleLines", "i32, i32, i32, i32, Color -> void")
+let draw_rectangle_rounded = ffi::sym(lib, "DrawRectangleRounded", "Rectangle, f32, i32, Color -> void")
 let draw_line = ffi::sym(lib, "DrawLine", "i32, i32, i32, i32, Color -> void")
+let draw_line_v = ffi::sym(lib, "DrawLineV", "Vector2, Vector2, Color -> void")
+let draw_line_ex = ffi::sym(lib, "DrawLineEx", "Vector2, Vector2, f32, Color -> void")
+let draw_triangle = ffi::sym(lib, "DrawTriangle", "Vector2, Vector2, Vector2, Color -> void")
+let draw_triangle_lines = ffi::sym(lib, "DrawTriangleLines", "Vector2, Vector2, Vector2, Color -> void")
+let draw_poly = ffi::sym(lib, "DrawPoly", "Vector2, i32, f32, f32, Color -> void")
+let draw_ring = ffi::sym(lib, "DrawRing", "Vector2, f32, f32, f32, f32, i32, Color -> void")
+
+// text
 let draw_text = ffi::sym(lib, "DrawText", "str, i32, i32, i32, Color -> void")
+let measure_text = ffi::sym(lib, "MeasureText", "str, i32 -> i32")
+let text_length = ffi::sym(lib, "TextLength", "str -> i32")
 let draw_fps = ffi::sym(lib, "DrawFPS", "i32, i32 -> void")
+
+// textures
+let load_texture = ffi::sym(lib, "LoadTexture", "str -> Texture2D")
+let unload_texture = ffi::sym(lib, "UnloadTexture", "Texture2D -> void")
+let is_texture_valid = ffi::sym(lib, "IsTextureValid", "Texture2D -> i32")
+let draw_texture = ffi::sym(lib, "DrawTexture", "Texture2D, i32, i32, Color -> void")
+let draw_texture_v = ffi::sym(lib, "DrawTextureV", "Texture2D, Vector2, Color -> void")
+let draw_texture_ex = ffi::sym(lib, "DrawTextureEx", "Texture2D, Vector2, f32, f32, Color -> void")
+let draw_texture_rec = ffi::sym(lib, "DrawTextureRec", "Texture2D, Rectangle, Vector2, Color -> void")
+let set_texture_filter = ffi::sym(lib, "SetTextureFilter", "Texture2D, i32 -> void")
+
+// color helpers
+let color_alpha = ffi::sym(lib, "ColorAlpha", "Color, f32 -> Color")
+let color_from_hsv = ffi::sym(lib, "ColorFromHSV", "f32, f32, f32 -> Color")
+let color_from_normalized = ffi::sym(lib, "ColorFromNormalized", "Vector4 -> Color")
 
 // input
 let is_key_down = ffi::sym(lib, "IsKeyDown", "i32 -> i32")
 let is_key_pressed = ffi::sym(lib, "IsKeyPressed", "i32 -> i32")
+let is_key_up = ffi::sym(lib, "IsKeyUp", "i32 -> i32")
+let is_key_released = ffi::sym(lib, "IsKeyReleased", "i32 -> i32")
+let get_key_pressed = ffi::sym(lib, "GetKeyPressed", "-> i32")
+let get_key_released = ffi::sym(lib, "GetKeyReleased", "-> i32")
 let get_mouse_x = ffi::sym(lib, "GetMouseX", "-> i32")
 let get_mouse_y = ffi::sym(lib, "GetMouseY", "-> i32")
+let get_mouse_position = ffi::sym(lib, "GetMousePosition", "-> Vector2")
+let get_mouse_delta = ffi::sym(lib, "GetMouseDelta", "-> Vector2")
+let get_mouse_wheel_move = ffi::sym(lib, "GetMouseWheelMove", "-> f32")
+let set_mouse_position = ffi::sym(lib, "SetMousePosition", "i32, i32 -> void")
+let set_mouse_cursor = ffi::sym(lib, "SetMouseCursor", "i32 -> void")
 let is_mouse_button_down = ffi::sym(lib, "IsMouseButtonDown", "i32 -> i32")
-
-// keys (raylib KEY_*)
-let KEY_SPACE = 32
-let KEY_TAB = 258
-let KEY_W = 87
-let KEY_S = 83
-let KEY_ESCAPE = 256
-let KEY_ENTER = 257
-let KEY_UP = 265
-let KEY_DOWN = 264
-let KEY_LEFT = 263
-let KEY_RIGHT = 262
-
-// mouse buttons (raylib MOUSE_BUTTON_*)
-let MOUSE_LEFT = 0
+let is_mouse_button_pressed = ffi::sym(lib, "IsMouseButtonPressed", "i32 -> i32")
+let is_mouse_button_released = ffi::sym(lib, "IsMouseButtonReleased", "i32 -> i32")
+let hide_cursor = ffi::sym(lib, "HideCursor", "-> void")
+let show_cursor = ffi::sym(lib, "ShowCursor", "-> void")
+let is_cursor_hidden = ffi::sym(lib, "IsCursorHidden", "-> i32")

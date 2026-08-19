@@ -2,7 +2,7 @@
 // First to 5 wins. ESC or window close to quit.
 // Run from repo root: cargo run -- --std ./std/ ./examples/raylib.iok
 
-import "../extern/raylib_6.0/lib/raylib.iok" @ raylib
+import "../extern/raylib_6.0/lib/raylib.iok" @ rl
 
 struct Ball {
     let pos
@@ -37,50 +37,47 @@ struct Ball {
 }
 
 struct Paddle {
-    let x
-    let y
-    let w = 12
-    let h = 90
+    let rec
     let speed = 6
     let score = 0
     let side = 1
 
     fn up() => {
-        self.y = self.y - self.speed
+        self.rec.y = self.rec.y - self.speed
     }
 
     fn down() => {
-        self.y = self.y + self.speed
+        self.rec.y = self.rec.y + self.speed
     }
 
     fn clamp() => {
-        let max_y = raylib::screen_height() - self.h
-        if self.y < 0 {
-            self.y = 0
+        let max_y = rl::screen_height() - self.rec.height
+        if self.rec.y < 0 {
+            self.rec.y = 0
         }
-        if self.y > max_y {
-            self.y = max_y
+        if self.rec.y > max_y {
+            self.rec.y = max_y
         }
     }
 
     fn ai_move(ball) => {
         // only chase the ball once it crosses into this paddle's half
         if self.side * ball.pos.x > self.side * 400 {
-            let target = ball.pos.y - self.h / 2
-            let gap = target - self.y
+            let target = ball.pos.y - self.rec.height / 2
+            let gap = target - self.rec.y
             if gap > 0.5 {
                 let step = gap * 0.2
                 if step > self.speed {
                     step = self.speed
                 }
-                self.y = self.y + step
+                self.rec.y = self.rec.y + step
             } els {
                 if gap < 0 - 0.5 {
                     let step = (0 - gap) * 0.2
                     if step > self.speed {
                         step = self.speed
                     }
-                    self.y = self.y - step
+                    self.rec.y = self.rec.y - step
                 }
             }
         }
@@ -89,38 +86,38 @@ struct Paddle {
 
 fn hit_paddle(ball, paddle) => {
     let nx = ball.pos.x
-    if nx < paddle.x {
-        nx = paddle.x
+    if nx < paddle.rec.x {
+        nx = paddle.rec.x
     }
-    if nx > paddle.x + paddle.w {
-        nx = paddle.x + paddle.w
+    if nx > paddle.rec.x + paddle.rec.width {
+        nx = paddle.rec.x + paddle.rec.width
     }
     let ny = ball.pos.y
-    if ny < paddle.y {
-        ny = paddle.y
+    if ny < paddle.rec.y {
+        ny = paddle.rec.y
     }
-    if ny > paddle.y + paddle.h {
-        ny = paddle.y + paddle.h
+    if ny > paddle.rec.y + paddle.rec.height {
+        ny = paddle.rec.y + paddle.rec.height
     }
     let dx = ball.pos.x - nx
     let dy = ball.pos.y - ny
     ret dx * dx + dy * dy < ball.r * ball.r
 }
 
-raylib::init_window(800, 450, "IOk Pong")
-raylib::set_target_fps(60)
+rl::init_window(800, 450, "IOk Pong")
+rl::set_target_fps(60)
 
-let player = Paddle { x: 20, y: 180, w: 12, h: 90, speed: 6, score: 0, side: 0 - 1 }
-let bot = Paddle { x: 768, y: 180, w: 12, h: 90, speed: 4.5, score: 0, side: 1 }
-let ball = Ball { pos: raylib::vec2(400, 225), vel: raylib::vec2(4, 1.5), r: 8 }
+let player = Paddle { rec: rl::rect(20, 180, 12, 90), speed: 6, score: 0, side: -1 }
+let bot = Paddle { rec: rl::rect(768, 180, 12, 90), speed: 4.5, score: 0, side: 1 }
+let ball = Ball { pos: rl::vec2(400, 225), vel: rl::vec2(4, 1.5), r: 8 }
 
 let WIN_SCORE = 5
 let ai_both = false
 let p1_name = "You"
 let p2_name = "Bot"
 
-while !raylib::window_should_close() {
-    if raylib::is_key_pressed(raylib::KEY_TAB) {
+while !rl::window_should_close() {
+    if rl::is_key_pressed(rl::KEY_TAB) {
         if ai_both {
             ai_both = false
             p1_name = "You"
@@ -135,10 +132,10 @@ while !raylib::window_should_close() {
     if ai_both {
         player.ai_move(ball)
     } els {
-        if raylib::is_key_down(raylib::KEY_W) || raylib::is_key_down(raylib::KEY_UP) {
+        if rl::is_key_down(rl::KEY_W) || rl::is_key_down(rl::KEY_UP) {
             player.up()
         }
-        if raylib::is_key_down(raylib::KEY_S) || raylib::is_key_down(raylib::KEY_DOWN) {
+        if rl::is_key_down(rl::KEY_S) || rl::is_key_down(rl::KEY_DOWN) {
             player.down()
         }
     }
@@ -172,28 +169,31 @@ while !raylib::window_should_close() {
         ball.serve(400, 225, 1)
     }
 
-    raylib::begin_drawing()
-    raylib::clear_background(raylib::color(20, 20, 30))
-    raylib::draw_line(400, 0, 400, 450, raylib::color(90, 90, 110))
-    raylib::draw_rectangle(player.x, player.y, player.w, player.h, raylib::color(80, 200, 120))
-    raylib::draw_rectangle(bot.x, bot.y, bot.w, bot.h, raylib::color(120, 140, 230))
-    raylib::draw_circle_v(ball.pos, ball.r, raylib::color(255, 80, 80))
-    raylib::draw_text(p1_name + ": " + player.score + "   " + p2_name + ": " + bot.score, 310, 20, 24, raylib::color(255, 255, 255))
-    raylib::draw_fps(10, 10)
+    rl::begin_drawing()
+    rl::clear_background(rl::color(20, 20, 30))
+    rl::draw_line(400, 0, 400, 450, rl::color(90, 90, 110))
+    rl::draw_rectangle_rec(player.rec, rl::color(80, 200, 120))
+    rl::draw_rectangle_rec(bot.rec, rl::color(120, 140, 230))
+    rl::draw_circle_v(ball.pos, ball.r, rl::color(255, 80, 80))
+    let score_line = p1_name + ": " + player.score + "   " + p2_name + ": " + bot.score
+    rl::draw_text(score_line, 400 - rl::measure_text(score_line, 24) / 2, 20, 24, rl::color(255, 255, 255))
+    rl::draw_fps(10, 10)
 
     if player.score >= WIN_SCORE {
-        raylib::draw_text(p1_name + " wins!", 320, 200, 40, raylib::color(80, 200, 120))
+        let win_line = p1_name + " wins!"
+        rl::draw_text(win_line, 400 - rl::measure_text(win_line, 40) / 2, 200, 40, rl::color(80, 200, 120))
     }
     if bot.score >= WIN_SCORE {
-        raylib::draw_text(p2_name + " wins!", 320, 200, 40, raylib::color(255, 80, 80))
+        let win_line = p2_name + " wins!"
+        rl::draw_text(win_line, 400 - rl::measure_text(win_line, 40) / 2, 200, 40, rl::color(255, 80, 80))
     }
 
-    raylib::end_drawing()
+    rl::end_drawing()
 
     if player.score >= WIN_SCORE || bot.score >= WIN_SCORE {
         break
     }
 }
 
-raylib::close_window()
+rl::close_window()
 write("closed\n")
