@@ -6,7 +6,7 @@ use libffi::middle::{Cif, Type};
 use libffi::raw::ffi_call;
 use rustc_hash::FxHashMap;
 use std::alloc::{alloc, alloc_zeroed, dealloc, Layout};
-use std::ffi::{CStr, CString, c_char};
+use std::ffi::{c_char, CStr, CString};
 use std::os::raw::c_void;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -210,95 +210,82 @@ impl Drop for AlignedBuf {
     }
 }
 
+macro_rules! write_num {
+    ($v:ident, $t:ty, $f:expr, $o:expr, $d:expr) => {
+        if matches!($f, FType::$v) {
+            match $o {
+                Object::Number(n) => {
+                    unsafe { *($d as *mut $t) = *n as $t }
+                    return Ok(());
+                }
+                _ => return Err("expected Number".into()),
+            }
+        }
+    };
+}
+
+macro_rules! read_num {
+    ($v:ident, $t:ty, $f:expr, $b:expr, $o:expr) => {
+        if matches!($f, FType::$v) {
+            return Object::Number(unsafe { *($b.as_ptr().add($o) as *const $t) } as f64);
+        }
+    };
+}
+
 pub fn marshal_scalar(
     t: &FType,
     obj: &Object,
     dst: *mut u8,
     strings: &mut Vec<CString>,
 ) -> Result<(), String> {
-    unsafe {
-        match t {
-            FType::I8 => match obj {
-                Object::Number(n) => *(dst as *mut i8) = *n as i8,
-                _ => return Err("expected Number".into()),
-            },
-            FType::I16 => match obj {
-                Object::Number(n) => *(dst as *mut i16) = *n as i16,
-                _ => return Err("expected Number".into()),
-            },
-            FType::I32 => match obj {
-                Object::Number(n) => *(dst as *mut i32) = *n as i32,
-                _ => return Err("expected Number".into()),
-            },
-            FType::I64 => match obj {
-                Object::Number(n) => *(dst as *mut i64) = *n as i64,
-                _ => return Err("expected Number".into()),
-            },
-            FType::U8 => match obj {
-                Object::Number(n) => *(dst as *mut u8) = *n as u8,
-                _ => return Err("expected Number".into()),
-            },
-            FType::U16 => match obj {
-                Object::Number(n) => *(dst as *mut u16) = *n as u16,
-                _ => return Err("expected Number".into()),
-            },
-            FType::U32 => match obj {
-                Object::Number(n) => *(dst as *mut u32) = *n as u32,
-                _ => return Err("expected Number".into()),
-            },
-            FType::U64 => match obj {
-                Object::Number(n) => *(dst as *mut u64) = *n as u64,
-                _ => return Err("expected Number".into()),
-            },
-            FType::F32 => match obj {
-                Object::Number(n) => *(dst as *mut f32) = *n as f32,
-                _ => return Err("expected Number".into()),
-            },
-            FType::F64 => match obj {
-                Object::Number(n) => *(dst as *mut f64) = *n,
-                _ => return Err("expected Number".into()),
-            },
-            FType::Str => match obj {
-                Object::String(s) => {
-                    let cs = CString::new(s.as_str())
-                        .map_err(|_| "string contains NUL".to_string())?;
-                    *(dst as *mut *const c_char) = cs.as_ptr();
-                    strings.push(cs);
-                }
-                Object::Ptr(p) => *(dst as *mut *const c_char) = (*p) as *const c_char,
-                _ => return Err("expected String".into()),
-            },
-            FType::Ptr => match obj {
-                Object::Ptr(p) => *(dst as *mut *mut c_void) = *p,
-                _ => return Err("expected Ptr".into()),
-            },
-            _ => return Err("unsupported type".into()),
-        }
+    write_num!(I8, i8, t, obj, dst);
+    write_num!(I16, i16, t, obj, dst);
+    write_num!(I32, i32, t, obj, dst);
+    write_num!(I64, i64, t, obj, dst);
+    write_num!(U8, u8, t, obj, dst);
+    write_num!(U16, u16, t, obj, dst);
+    write_num!(U32, u32, t, obj, dst);
+    write_num!(U64, u64, t, obj, dst);
+    write_num!(F32, f32, t, obj, dst);
+    write_num!(F64, f64, t, obj, dst);
+    match t {
+        FType::Str => match obj {
+            Object::String(s) => {
+                let cs = CString::new(s.as_str()).map_err(|_| "string contains NUL".to_string())?;
+                unsafe { *(dst as *mut *const c_char) = cs.as_ptr() };
+                strings.push(cs);
+            }
+            Object::Ptr(p) => unsafe { *(dst as *mut *const c_char) = (*p) as *const c_char },
+            _ => return Err("expected String".into()),
+        },
+        FType::Ptr => match obj {
+            Object::Ptr(p) => unsafe { *(dst as *mut *mut c_void) = *p },
+            _ => return Err("expected Ptr".into()),
+        },
+        _ => return Err("unsupported type".into()),
     }
     Ok(())
 }
 
-// ponytail: struct fields are numeric/nested only — char* fields need the CString
+// struct fields are numeric/nested only char* fields need the CString
 // to outlive the struct bytes, add an owned-strings list to CStruct when needed.
 fn read_field(bytes: &[u8], t: &FType, off: usize) -> Object {
-    unsafe {
-        match t {
-            FType::I8 => Object::Number(*(bytes.as_ptr().add(off) as *const i8) as f64),
-            FType::I16 => Object::Number(*(bytes.as_ptr().add(off) as *const i16) as f64),
-            FType::I32 => Object::Number(*(bytes.as_ptr().add(off) as *const i32) as f64),
-            FType::I64 => Object::Number(*(bytes.as_ptr().add(off) as *const i64) as f64),
-            FType::U8 => Object::Number(*(bytes.as_ptr().add(off) as *const u8) as f64),
-            FType::U16 => Object::Number(*(bytes.as_ptr().add(off) as *const u16) as f64),
-            FType::U32 => Object::Number(*(bytes.as_ptr().add(off) as *const u32) as f64),
-            FType::U64 => Object::Number(*(bytes.as_ptr().add(off) as *const u64) as f64),
-            FType::F32 => Object::Number(*(bytes.as_ptr().add(off) as *const f32) as f64),
-            FType::F64 => Object::Number(*(bytes.as_ptr().add(off) as *const f64)),
-            FType::Struct(l) => Object::CStruct {
-                layout: l.clone(),
-                bytes: Rc::new(bytes[off..off + l.size].to_vec()),
-            },
-            _ => Object::Null,
-        }
+    read_num!(I8, i8, t, bytes, off);
+    read_num!(I16, i16, t, bytes, off);
+    read_num!(I32, i32, t, bytes, off);
+    read_num!(I64, i64, t, bytes, off);
+    read_num!(U8, u8, t, bytes, off);
+    read_num!(U16, u16, t, bytes, off);
+    read_num!(U32, u32, t, bytes, off);
+    read_num!(U64, u64, t, bytes, off);
+    read_num!(F32, f32, t, bytes, off);
+    read_num!(F64, f64, t, bytes, off);
+    match t {
+        FType::Struct(l) => Object::CStruct {
+            layout: l.clone(),
+            bytes: Rc::new(bytes[off..off + l.size].to_vec()),
+        },
+        _ => Object::Null,
     }
 }
 
@@ -342,6 +329,22 @@ pub fn set_struct_field(obj: &Object, fname: u32, value: &Object) -> Object {
     Object::Null
 }
 
+fn check_struct_size(bytes: &[u8], l: &CLayout) -> bool {
+    if bytes.len() != l.size {
+        Logger::error(
+            &format!(
+                "struct size mismatch: expected {}, got {}",
+                l.size,
+                bytes.len()
+            ),
+            None,
+            ErrorType::RunTime,
+        );
+        return false;
+    }
+    true
+}
+
 pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Object {
     if args.len() != sig.args.len() {
         Logger::error(
@@ -369,12 +372,7 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
         match t {
             FType::Struct(l) => {
                 if let Object::CStruct { bytes, .. } = a {
-                    if bytes.len() != l.size {
-                        Logger::error(
-                            &format!("struct size mismatch: expected {}, got {}", l.size, bytes.len()),
-                            None,
-                            ErrorType::RunTime,
-                        );
+                    if !check_struct_size(bytes, l) {
                         return Object::Null;
                     }
                     let mut buf = AlignedBuf::new(l.size, l.align);
@@ -425,16 +423,7 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                 let ptr = cell.0.as_mut_ptr();
                 match a {
                     Object::CStruct { bytes, .. } => {
-                        if bytes.len() != l.size {
-                            Logger::error(
-                                &format!(
-                                    "struct size mismatch: expected {}, got {}",
-                                    l.size,
-                                    bytes.len()
-                                ),
-                                None,
-                                ErrorType::RunTime,
-                            );
+                        if !check_struct_size(bytes, l) {
                             return Object::Null;
                         }
                         unsafe { *(ptr as *mut *const u8) = bytes.as_ptr() };
@@ -456,11 +445,7 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
                 let mut cell = Box::new(Cell([0u8; 64]));
                 let ptr = cell.0.as_mut_ptr();
                 if let Err(e) = marshal_scalar(t, a, ptr, &mut strings) {
-                    Logger::error(
-                        &format!("bad argument: {e}"),
-                        None,
-                        ErrorType::RunTime,
-                    );
+                    Logger::error(&format!("bad argument: {e}"), None, ErrorType::RunTime);
                     return Object::Null;
                 }
                 avalue.push(ptr as *mut c_void);
@@ -485,26 +470,18 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
     unsafe {
         ffi_call(
             cif.as_raw_ptr(),
-            Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn()>(symbol)),
+            Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn()>(
+                symbol,
+            )),
             rvalue,
             avalue.as_mut_ptr(),
         );
     }
 
-    // small int returns are written as a full register; cells are zeroed so
-    // reading 8 bytes and truncating is safe on both 32/64-bit ABIs
+    // numeric returns land in the zeroed cell; reading exact width from its
+    // start equals the full-register read (same low bytes)
     match &sig.ret {
         None => Object::Null,
-        Some(FType::I8) => Object::Number(unsafe { *(rvalue as *const i64) } as i8 as f64),
-        Some(FType::I16) => Object::Number(unsafe { *(rvalue as *const i64) } as i16 as f64),
-        Some(FType::I32) => Object::Number(unsafe { *(rvalue as *const i64) } as i32 as f64),
-        Some(FType::I64) => Object::Number(unsafe { *(rvalue as *const i64) } as f64),
-        Some(FType::U8) => Object::Number(unsafe { *(rvalue as *const u64) } as u8 as f64),
-        Some(FType::U16) => Object::Number(unsafe { *(rvalue as *const u64) } as u16 as f64),
-        Some(FType::U32) => Object::Number(unsafe { *(rvalue as *const u64) } as u32 as f64),
-        Some(FType::U64) => Object::Number(unsafe { *(rvalue as *const u64) } as f64),
-        Some(FType::F32) => Object::Number(unsafe { *(rvalue as *const f32) } as f64),
-        Some(FType::F64) => Object::Number(unsafe { *(rvalue as *const f64) }),
         Some(FType::Str) => {
             let p = unsafe { *(rvalue as *const *const c_char) };
             if p.is_null() {
@@ -524,5 +501,7 @@ pub fn call_foreign(sig: &ParsedSig, symbol: *mut c_void, args: &[Object]) -> Ob
             }
         }
         Some(FType::StructPtr(_)) => Object::Null,
+        Some(t) => read_field(&ret_cell.0, t, 0),
     }
 }
+
