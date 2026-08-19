@@ -2,8 +2,8 @@ use crate::ffi;
 use crate::interner::{intern, resolve};
 use crate::std_native;
 use crate::{
-    lexer::Lexer, lexer::TokenType, logger::ErrorType, logger::Logger, object::Object,
-    parser::Node, parser::Parser, parser::Tree,
+    lexer::Lexer, lexer::Loc, lexer::TokenType, logger::ErrorType, logger::Logger,
+    object::Object, parser::Node, parser::Parser, parser::Tree,
 };
 use core::iter::Iterator;
 use lazy_static::lazy_static;
@@ -35,6 +35,7 @@ pub struct Interpreter {
     trail: Vec<ScopeFrame>,
     current_path: String,
     std_path: String,
+    pub current_loc: Option<Loc>,
 }
 
 macro_rules! register_native {
@@ -138,6 +139,7 @@ impl Interpreter {
             }],
             current_path,
             std_path,
+            current_loc: None,
         }
     }
 
@@ -356,7 +358,7 @@ impl Interpreter {
             }
             Tree::ImmCall { callee, args } => {
                 let obj = self.interpret(callee);
-                self.call_function(&obj, args, None)
+                self.call_function(&obj, args, None, Some(node.loc))
             }
             Tree::Ret(expr) => Object::Ret(Box::new(self.interpret(expr))),
             Tree::Break => Object::Break,
@@ -410,7 +412,12 @@ impl Interpreter {
                         if let Some(slot) = self.interpret_mut(target) {
                             if matches!(slot, Object::CStruct { .. }) {
                                 if let Tree::Ident(name) = &member.tree {
-                                    let updated = ffi::set_struct_field(slot, *name, &value_obj);
+                                    let updated = ffi::set_struct_field(
+                                        slot,
+                                        *name,
+                                        &value_obj,
+                                        Some(node.loc),
+                                    );
                                     *slot = updated;
                                 }
                             } else if let Tree::Ident(name) = &member.tree {
@@ -468,7 +475,7 @@ impl Interpreter {
                 let var = self.get_var(name);
                 if var.is_some() {
                     let obj = var.unwrap().clone();
-                    self.call_function(&obj, call_args, None)
+                    self.call_function(&obj, call_args, None, Some(node.loc))
                 } else {
                     Logger::error(
                         &format!("Undefined function: {}", resolve(*name)),
@@ -647,6 +654,25 @@ impl Interpreter {
                         if matches!(target_object, Object::CStruct { .. }) {
                             return ffi::struct_field(&target_object, *name);
                         }
+                        if let Object::NameSpace {
+                            name: mod_name,
+                            ref namespace,
+                        } = &target_object
+                        {
+                            if let Some(v) = namespace.get(name) {
+                                return v.clone();
+                            }
+                            Logger::error(
+                                &format!(
+                                    "Undefined variable: {}::{}",
+                                    resolve(*mod_name),
+                                    resolve(*name)
+                                ),
+                                Some(node.loc),
+                                ErrorType::RunTime,
+                            );
+                            return Object::Null;
+                        }
                         return target_object
                             .get_field(name)
                             .unwrap_or(&Object::Null)
@@ -674,37 +700,96 @@ impl Interpreter {
                         }
 
                         if let Object::Instance { ref struct_def, .. } = &target_object {
-                            if let Object::StructDef { methods, .. } = &**struct_def {
+                            if let Object::StructDef {
+                                name: def_name,
+                                methods,
+                                ..
+                            } = &**struct_def
+                            {
                                 let methods = methods.clone();
                                 if let Some(method) = methods.get(name) {
-                                    let result =
-                                        self.call_function(method, args, Some(&mut target_object));
+                                    let result = self.call_function(
+                                        method,
+                                        args,
+                                        Some(&mut target_object),
+                                        Some(node.loc),
+                                    );
                                     if let Some(slot) = self.interpret_mut(target) {
                                         *slot = target_object;
                                     }
                                     return result;
                                 }
+                                Logger::error(
+                                    &format!(
+                                        "Undefined method: {}::{}",
+                                        resolve(*def_name),
+                                        resolve(*name)
+                                    ),
+                                    Some(node.loc),
+                                    ErrorType::RunTime,
+                                );
                             }
                             return Object::Null;
                         }
 
-                        if let Object::StructDef { ref methods, .. } = &target_object {
+                        if let Object::StructDef {
+                            name: def_name,
+                            ref methods,
+                            ..
+                        } = &target_object
+                        {
                             let method = methods.get(name).cloned();
                             return match method {
                                 Some(method) => {
-                                    self.call_function(&method, args, Some(&mut target_object))
+                                    self.call_function(
+                                        &method,
+                                        args,
+                                        Some(&mut target_object),
+                                        Some(node.loc),
+                                    )
                                 }
-                                None => Object::Null,
+                                None => {
+                                    Logger::error(
+                                        &format!(
+                                            "Undefined method: {}::{}",
+                                            resolve(*def_name),
+                                            resolve(*name)
+                                        ),
+                                        Some(node.loc),
+                                        ErrorType::RunTime,
+                                    );
+                                    Object::Null
+                                }
                             };
                         }
 
-                        if let Object::NameSpace { ref namespace, .. } = &target_object {
+                        if let Object::NameSpace {
+                            name: mod_name,
+                            ref namespace,
+                        } = &target_object
+                        {
                             let method = namespace.get(name).cloned();
                             return match method {
                                 Some(method) => {
-                                    self.call_function(&method, args, Some(&mut target_object))
+                                    self.call_function(
+                                        &method,
+                                        args,
+                                        Some(&mut target_object),
+                                        Some(node.loc),
+                                    )
                                 }
-                                None => Object::Null,
+                                None => {
+                                    Logger::error(
+                                        &format!(
+                                            "Undefined function: {}::{}",
+                                            resolve(*mod_name),
+                                            resolve(*name)
+                                        ),
+                                        Some(node.loc),
+                                        ErrorType::RunTime,
+                                    );
+                                    Object::Null
+                                }
                             };
                         }
 
@@ -720,7 +805,11 @@ impl Interpreter {
             Tree::Import { path, alias } => {
                 if let Tree::MemberAccess { .. } = &path.tree {
                     let flat_path = self.flatten_path(path);
-                    let root_path = format!("{}/{}.iok", self.std_path, resolve(flat_path[0]));
+                    let root_path = format!(
+                        "{}/{}.iok",
+                        self.std_path.trim_end_matches(['/', '\\']),
+                        resolve(flat_path[0])
+                    );
                     let root_namespace = self.import_file_to_namespace(&root_path);
 
                     let mut scope = root_namespace;
@@ -834,6 +923,7 @@ impl Interpreter {
         function: &Object,
         call_args: &Vec<Node>,
         mut slf: Option<&mut Object>,
+        loc: Option<Loc>,
     ) -> Object {
         if let Object::Fn { args, body, .. } = function {
             self.enter_fn_scope();
@@ -877,8 +967,9 @@ impl Interpreter {
             call_args.iter().for_each(|arg| {
                 args_objects.push(self.interpret(arg));
             });
-            return ffi::call_foreign(sig, *symbol, &args_objects);
+            return ffi::call_foreign(sig, *symbol, &args_objects, loc);
         } else if let Object::NativeFn { function, .. } = function {
+            self.current_loc = loc;
             let mut args_objects = vec![];
             call_args.iter().for_each(|arg| {
                 args_objects.push(self.interpret(arg));
@@ -916,7 +1007,14 @@ impl Interpreter {
         }
     }
     fn import_file_to_namespace(&self, file_path: &String) -> FxHashMap<u32, Object> {
-        let (parsed_trees, input) = self.generate_ast(file_path);
+        let mut input = String::new();
+        let mut file = File::open(file_path).expect("Can't locate lib");
+        file.read_to_string(&mut input).expect("can't read file");
+        input = input.trim_end().to_string();
+
+        // push BEFORE lexing so Loc gets this file's source id
+        Logger::push_source(file_path, &input);
+        let parsed_trees = self.parse_source(&input);
         let parent_path = Path::new(file_path)
             .canonicalize()
             .expect("Can't get path")
@@ -926,7 +1024,6 @@ impl Interpreter {
             .unwrap()
             .to_string();
 
-        Logger::push_source(file_path, &input);
         let namespace = self.eval_namespace(parent_path, &parsed_trees);
         Logger::pop_source();
         namespace
@@ -936,15 +1033,6 @@ impl Interpreter {
         for (name, value) in namespace {
             self.set_var(name, value);
         }
-    }
-    fn generate_ast(&self, file_path: &String) -> (Vec<Node>, String) {
-        let mut input = String::new();
-
-        let mut file = File::open(&file_path).expect("Can't locate lib");
-        file.read_to_string(&mut input).expect("can't read file");
-        input = input.trim_end().to_string();
-
-        (self.parse_source(&input), input)
     }
 
     fn parse_source(&self, source: &str) -> Vec<Node> {

@@ -24,22 +24,30 @@ struct SourceInfo {
 
 lazy_static! {
     static ref SOURCES: Mutex<Vec<SourceInfo>> = Mutex::new(Vec::new());
+    static ref ACTIVE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
     static ref ERRORS: AtomicUsize = AtomicUsize::new(0);
 }
 
 pub struct Logger;
 
 impl Logger {
+    // Sources are never removed: Loc carries the source index, and a Loc can
+    // outlive its push/pop (a function defined in an imported file runs later).
     pub fn push_source(name: &str, text: &str) {
-        let lines = text.lines().map(|l| l.to_string()).collect();
-        SOURCES.lock().unwrap().push(SourceInfo {
+        let mut sources = SOURCES.lock().unwrap();
+        sources.push(SourceInfo {
             name: name.to_string(),
-            lines,
+            lines: text.lines().map(|l| l.to_string()).collect(),
         });
+        ACTIVE.lock().unwrap().push(sources.len() - 1);
     }
 
     pub fn pop_source() {
-        SOURCES.lock().unwrap().pop();
+        ACTIVE.lock().unwrap().pop();
+    }
+
+    pub fn current_source_id() -> usize {
+        ACTIVE.lock().unwrap().last().copied().unwrap_or(0)
     }
 
     pub fn error_count() -> usize {
@@ -49,7 +57,10 @@ impl Logger {
     pub fn error(msg: &str, loc: Option<Loc>, err: ErrorType) {
         ERRORS.fetch_add(1, Ordering::Relaxed);
         let sources = SOURCES.lock().unwrap();
-        let source = sources.last();
+        let active = ACTIVE.lock().unwrap().last().copied();
+        let source = loc
+            .and_then(|l| sources.get(l.src))
+            .or_else(|| active.and_then(|i| sources.get(i)));
 
         match (loc, source) {
             (Some(l), Some(src)) => {

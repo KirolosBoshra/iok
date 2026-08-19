@@ -337,14 +337,14 @@ pub fn dlopen(args: Vec<Object>, _: &mut Interpreter) -> Object {
     }
 }
 
-pub fn dlsym(args: Vec<Object>, _: &mut Interpreter) -> Object {
+pub fn dlsym(args: Vec<Object>, interp: &mut Interpreter) -> Object {
     if let (Some(Object::Lib { lib, .. }), Some(Object::String(name)), Some(Object::String(sig))) =
         (args.get(0), args.get(1), args.get(2))
     {
         let parsed = match ffi::parse_sig(sig) {
             Ok(p) => p,
             Err(e) => {
-                Logger::error(&e, None, ErrorType::RunTime);
+                Logger::error(&e, interp.current_loc, ErrorType::RunTime);
                 return Object::Null;
             }
         };
@@ -364,7 +364,7 @@ pub fn dlsym(args: Vec<Object>, _: &mut Interpreter) -> Object {
     Object::Null
 }
 
-pub fn def_struct(args: Vec<Object>, _: &mut Interpreter) -> Object {
+pub fn def_struct(args: Vec<Object>, interp: &mut Interpreter) -> Object {
     if let (Some(Object::String(name)), Some(Object::String(spec))) =
         (args.get(0), args.get(1))
     {
@@ -380,7 +380,7 @@ pub fn def_struct(args: Vec<Object>, _: &mut Interpreter) -> Object {
                 None => {
                     Logger::error(
                         &format!("Bad field `{part}`, expected `name:type`"),
-                        None,
+                        interp.current_loc,
                         ErrorType::RunTime,
                     );
                     return Object::Null;
@@ -389,7 +389,7 @@ pub fn def_struct(args: Vec<Object>, _: &mut Interpreter) -> Object {
             match ffi::parse_type(ftype) {
                 Ok(t) => fields.push((intern(fname), t)),
                 Err(e) => {
-                    Logger::error(&e, None, ErrorType::RunTime);
+                    Logger::error(&e, interp.current_loc, ErrorType::RunTime);
                     return Object::Null;
                 }
             }
@@ -401,7 +401,7 @@ pub fn def_struct(args: Vec<Object>, _: &mut Interpreter) -> Object {
     Object::Null
 }
 
-pub fn struct_val(args: Vec<Object>, _: &mut Interpreter) -> Object {
+pub fn struct_val(args: Vec<Object>, interp: &mut Interpreter) -> Object {
     if let (Some(Object::String(name)), Some(Object::List(vals))) =
         (args.get(0), args.get(1))
     {
@@ -410,7 +410,7 @@ pub fn struct_val(args: Vec<Object>, _: &mut Interpreter) -> Object {
             None => {
                 Logger::error(
                     &format!("Unknown struct `{name}`"),
-                    None,
+                    interp.current_loc,
                     ErrorType::RunTime,
                 );
                 return Object::Null;
@@ -423,7 +423,7 @@ pub fn struct_val(args: Vec<Object>, _: &mut Interpreter) -> Object {
                     layout.fields.len(),
                     vals.len()
                 ),
-                None,
+                interp.current_loc,
                 ErrorType::RunTime,
             );
             return Object::Null;
@@ -432,7 +432,7 @@ pub fn struct_val(args: Vec<Object>, _: &mut Interpreter) -> Object {
         let mut strings = vec![];
         for ((_, t, off), v) in layout.fields.iter().zip(vals) {
             if let Err(e) = ffi::marshal_scalar(t, v, bytes[*off..].as_mut_ptr(), &mut strings) {
-                Logger::error(&e, None, ErrorType::RunTime);
+                Logger::error(&e, interp.current_loc, ErrorType::RunTime);
                 return Object::Null;
             }
         }
@@ -451,11 +451,11 @@ pub fn get_field(args: Vec<Object>, _: &mut Interpreter) -> Object {
     Object::Null
 }
 
-pub fn set_field(args: Vec<Object>, _: &mut Interpreter) -> Object {
+pub fn set_field(args: Vec<Object>, interp: &mut Interpreter) -> Object {
     if let (Some(obj), Some(Object::String(fname)), Some(value)) =
         (args.first(), args.get(1), args.get(2))
     {
-        return ffi::set_struct_field(obj, intern(&**fname), value);
+        return ffi::set_struct_field(obj, intern(&**fname), value, interp.current_loc);
     }
     Object::Null
 }
