@@ -61,6 +61,31 @@ fn client() {
 // One-line HTTP GET
 let html = net::http_get("example.com", 80, "/")
 ```
+## Raylib Bindings
+```rust
+// Full raylib 6.0 bindings via FFI (extern/raylib_6.0/lib/raylib.iok)
+// Requires the raylib 6.0 shared library (.dll / .so) on your PATH
+import "../extern/raylib_6.0/lib/raylib.iok" @ rl
+
+rl::init_window(800, 450, "IOk Pong")
+rl::set_target_fps(60)
+
+let player = Paddle::new(20, 180, 6, -1)   // W/S to move, Tab for bot-vs-bot
+let bot = Paddle::new(768, 180, 4.5, 1)
+
+while !rl::window_should_close() {
+    player.clamp()
+    bot.ai_move(ball)
+    rl::begin_drawing()
+    rl::clear_background(rl::color(20, 20, 30))
+    rl::draw_rectangle_rec(player.rec, rl::color(80, 200, 120))
+    rl::draw_circle_v(ball.pos, ball.r, rl::color(255, 80, 80))
+    rl::end_drawing()
+}
+
+rl::close_window()
+```
+See `examples/raylib.iok` for the full pong game (first to 5 wins).
 ## TODO
 Task  | Implemented
 ------------- | -------------
@@ -71,6 +96,7 @@ Imports |  ✅
 STD Lib | 🚧 Work in progress
 File IO | ⚠ Basic support for now
 Socket / Network | ✅
+FFI | ✅
 Optimize | ⚠ I think it's fast enough for a tree-walk interprter
 Bytecode | 🚧 Not yet, but will be implemented
 
@@ -97,6 +123,6 @@ cargo build --release
 ./target/release/iok --std ./std/ ./examples/todo_web/server.iok
 # Or copy std dir to target/release/ and just run
 ./target/release/iok ./examples/hello.iok
-# Start Interprter
+# Start Interpreter
 ./target/release/iok --std ./std/
 ```
