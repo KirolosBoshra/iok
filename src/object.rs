@@ -1,5 +1,5 @@
-use crate::file_handler::FileHandler;
 use crate::ffi::{CLayout, ParsedSig};
+use crate::file_handler::FileHandler;
 use crate::interner::{intern, resolve};
 use crate::lexer::Loc;
 use crate::logger::{ErrorType, Logger};
@@ -450,7 +450,7 @@ impl fmt::Display for Object {
                 fields: _,
             } => write!(f, "Object{def}"),
             Object::NameSpace { name, .. } => write!(f, "@{}", resolve(*name)),
-            Object::Lib { path, .. } => write!(f, "Lib<{path}>"),
+            Object::Lib { path, .. } => write!(f, "Lib<\"{path}\">"),
             Object::ForeignFn { name, .. } => write!(f, "ForeignFn<{name}>"),
             Object::CStruct { layout, .. } => {
                 write!(f, "Struct<{}>", resolve(layout.name))
