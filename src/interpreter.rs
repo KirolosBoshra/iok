@@ -31,7 +31,7 @@ struct ScopeFrame {
 
 #[derive(Debug)]
 pub struct Interpreter {
-    vars: FxHashMap<u32, Vec<Object>>,
+    vars: Vec<Vec<Object>>,
     trail: Vec<ScopeFrame>,
     module_ctx: Vec<Option<Rc<FxHashMap<u32, Object>>>>,
     current_path: String,
@@ -127,10 +127,11 @@ impl Interpreter {
         register_native!(base_scope, "__byref", std_native::byref);
         register_native!(base_scope, "__nullptr", std_native::null_ptr);
 
-        let vars = base_scope
-            .into_iter()
-            .map(|(name, value)| (name, vec![value]))
-            .collect();
+        let max_id = base_scope.keys().max().copied().unwrap_or(0);
+        let mut vars = vec![Vec::new(); max_id as usize + 1];
+        for (name, value) in base_scope {
+            vars[name as usize].push(value);
+        }
 
         Self {
             vars,
@@ -165,11 +166,8 @@ impl Interpreter {
     fn exit_scope(&mut self) {
         if let Some(bound) = self.trail.pop() {
             for name in bound.names {
-                if let Some(stack) = self.vars.get_mut(&name) {
+                if let Some(stack) = self.vars.get_mut(name as usize) {
                     stack.pop();
-                    if stack.is_empty() {
-                        self.vars.remove(&name);
-                    }
                 }
             }
         }
@@ -178,14 +176,19 @@ impl Interpreter {
     #[inline]
     fn set_var(&mut self, name: u32, value: Object) {
         if let Some(trail) = self.trail.last_mut() {
-            self.vars.entry(name).or_default().push(value);
+            if name as usize >= self.vars.len() {
+                self.vars.resize(name as usize + 1, Vec::new());
+            }
+            self.vars[name as usize].push(value);
             trail.names.push(name);
         }
     }
 
     #[inline]
     pub fn get_var(&mut self, name: &u32) -> Option<&mut Object> {
-        self.vars.get_mut(name).and_then(|stack| stack.last_mut())
+        self.vars
+            .get_mut(*name as usize)
+            .and_then(|stack| stack.last_mut())
     }
 
     // Fallback lookup into the innermost module-context map (module functions
@@ -208,7 +211,7 @@ impl Interpreter {
             .map(|f| f.names.iter().filter(|n| *n == name).count())
             .sum();
         self.vars
-            .get(name)
+            .get(*name as usize)
             .and_then(|stack| stack.get(total.checked_sub(1)?))
             .cloned()
     }
@@ -1082,9 +1085,9 @@ impl Interpreter {
             mod_interpreter.interpret(ast);
         });
 
-        for (n, stack) in mod_interpreter.vars.iter() {
+        for (id, stack) in mod_interpreter.vars.iter().enumerate() {
             if let Some(value) = stack.first() {
-                namespace.insert(*n, value.clone());
+                namespace.insert(id as u32, value.clone());
             }
         }
         namespace
