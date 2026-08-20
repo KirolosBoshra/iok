@@ -2,8 +2,8 @@ use crate::ffi;
 use crate::interner::{intern, resolve};
 use crate::std_native;
 use crate::{
-    lexer::Lexer, lexer::Loc, lexer::TokenType, logger::ErrorType, logger::Logger,
-    object::Object, parser::Node, parser::Parser, parser::Tree,
+    lexer::Lexer, lexer::Loc, lexer::TokenType, logger::ErrorType, logger::Logger, object::Object,
+    parser::Node, parser::Parser, parser::Tree,
 };
 use core::iter::Iterator;
 use lazy_static::lazy_static;
@@ -33,6 +33,7 @@ struct ScopeFrame {
 pub struct Interpreter {
     vars: FxHashMap<u32, Vec<Object>>,
     trail: Vec<ScopeFrame>,
+    module_ctx: Vec<Option<Rc<FxHashMap<u32, Object>>>>,
     current_path: String,
     std_path: String,
     pub current_loc: Option<Loc>,
@@ -137,6 +138,7 @@ impl Interpreter {
                 names: vec![],
                 is_fn: false,
             }],
+            module_ctx: vec![None],
             current_path,
             std_path,
             current_loc: None,
@@ -184,6 +186,17 @@ impl Interpreter {
     #[inline]
     pub fn get_var(&mut self, name: &u32) -> Option<&mut Object> {
         self.vars.get_mut(name).and_then(|stack| stack.last_mut())
+    }
+
+    // Fallback lookup into the innermost module-context map (module functions
+    // see their module's bindings without copying them into scope).
+    fn lookup_module(&self, name: &u32) -> Option<Object> {
+        for ctx in self.module_ctx.iter().rev().flatten() {
+            if let Some(v) = ctx.get(name) {
+                return Some(v.clone());
+            }
+        }
+        None
     }
 
     // Resolve a variable as seen from the caller of the current function,
@@ -339,7 +352,11 @@ impl Interpreter {
                 });
                 Object::List(buf)
             }
-            Tree::Ident(var) => self.get_var(var).unwrap_or(&mut Object::Null).clone(),
+            Tree::Ident(var) => self
+                .get_var(var)
+                .cloned()
+                .or_else(|| self.lookup_module(var))
+                .unwrap_or(Object::Null),
             Tree::Range(start, end) => {
                 let start_obj = self.interpret(start);
                 let end_obj = self.interpret(end);
@@ -475,6 +492,8 @@ impl Interpreter {
                 let var = self.get_var(name);
                 if var.is_some() {
                     let obj = var.unwrap().clone();
+                    self.call_function(&obj, call_args, None, Some(node.loc))
+                } else if let Some(obj) = self.lookup_module(name) {
                     self.call_function(&obj, call_args, None, Some(node.loc))
                 } else {
                     Logger::error(
@@ -740,14 +759,12 @@ impl Interpreter {
                         {
                             let method = methods.get(name).cloned();
                             return match method {
-                                Some(method) => {
-                                    self.call_function(
-                                        &method,
-                                        args,
-                                        Some(&mut target_object),
-                                        Some(node.loc),
-                                    )
-                                }
+                                Some(method) => self.call_function(
+                                    &method,
+                                    args,
+                                    Some(&mut target_object),
+                                    Some(node.loc),
+                                ),
                                 None => {
                                     Logger::error(
                                         &format!(
@@ -770,14 +787,12 @@ impl Interpreter {
                         {
                             let method = namespace.get(name).cloned();
                             return match method {
-                                Some(method) => {
-                                    self.call_function(
-                                        &method,
-                                        args,
-                                        Some(&mut target_object),
-                                        Some(node.loc),
-                                    )
-                                }
+                                Some(method) => self.call_function(
+                                    &method,
+                                    args,
+                                    Some(&mut target_object),
+                                    Some(node.loc),
+                                ),
                                 None => {
                                     Logger::error(
                                         &format!(
@@ -830,7 +845,7 @@ impl Interpreter {
                         if i < flat_path.len() - 1 {
                             match val {
                                 Object::NameSpace { namespace, .. } => {
-                                    scope = *namespace; // enter that namespace
+                                    scope = namespace.as_ref().clone(); // enter that namespace
                                 }
                                 _ => panic!("`{}` is not a namespace", resolve(*seg)),
                             }
@@ -850,7 +865,7 @@ impl Interpreter {
                 if let Some(name) = *alias {
                     let obj = Object::NameSpace {
                         name,
-                        namespace: Box::new(namespace),
+                        namespace: Rc::new(namespace),
                     };
                     self.set_var(name, obj);
                 } else {
@@ -938,16 +953,18 @@ impl Interpreter {
             }
             if let Some(obj) = slf.as_deref_mut() {
                 if let Object::NameSpace { namespace, .. } = obj {
-                    for (name, value) in namespace.iter() {
-                        self.set_var(*name, value.clone());
-                    }
+                    self.module_ctx.push(Some(Rc::clone(namespace)));
                 } else {
+                    self.module_ctx.push(None);
                     self.set_var(*M_SELF, obj.clone());
                 }
+            } else {
+                self.module_ctx.push(None);
             }
 
             // Execute the function body
             let result = self.eval_block(&body);
+            self.module_ctx.pop();
             // Write mutated `self` back to the caller's instance.
             if let Some(obj) = slf {
                 if !matches!(obj, Object::NameSpace { .. }) {
@@ -962,12 +979,15 @@ impl Interpreter {
                 Object::Ret(expr) => *expr,
                 _ => Object::Null,
             };
-        } else if let Object::ForeignFn { symbol, sig, .. } = function {
+        } else if let Object::ForeignFn {
+            symbol, sig, cif, ..
+        } = function
+        {
             let mut args_objects = vec![];
             call_args.iter().for_each(|arg| {
                 args_objects.push(self.interpret(arg));
             });
-            return ffi::call_foreign(sig, *symbol, &args_objects, loc);
+            return ffi::call_foreign(sig, cif, *symbol, &args_objects, loc);
         } else if let Object::NativeFn { function, .. } = function {
             self.current_loc = loc;
             let mut args_objects = vec![];

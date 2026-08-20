@@ -3,7 +3,8 @@ use crate::lexer::Loc;
 use crate::logger::{ErrorType, Logger};
 use crate::object::Object;
 use lazy_static::lazy_static;
-use libffi::middle::{Cif, Type};
+pub use libffi::middle::Cif;
+use libffi::middle::Type;
 use libffi::raw::ffi_call;
 use rustc_hash::FxHashMap;
 use std::alloc::{alloc, alloc_zeroed, dealloc, Layout};
@@ -169,6 +170,17 @@ fn to_ffi_type(t: &FType) -> Type {
     }
 }
 
+// libffi Cif for a signature built once at symbol bind time, reused per call
+pub fn build_cif(sig: &ParsedSig) -> Cif {
+    Cif::new(
+        sig.args.iter().map(to_ffi_type).collect::<Vec<_>>(),
+        match &sig.ret {
+            Some(t) => to_ffi_type(t),
+            None => Type::void(),
+        },
+    )
+}
+
 fn type_name(t: &FType) -> String {
     match t {
         FType::I8 => "i8".into(),
@@ -326,12 +338,7 @@ pub fn struct_field(obj: &Object, fname: u32) -> Object {
     Object::Null
 }
 
-pub fn set_struct_field(
-    obj: &Object,
-    fname: u32,
-    value: &Object,
-    loc: Option<Loc>,
-) -> Object {
+pub fn set_struct_field(obj: &Object, fname: u32, value: &Object, loc: Option<Loc>) -> Object {
     if let Object::CStruct { layout, bytes } = obj {
         for (name, t, off) in &layout.fields {
             if *name == fname {
@@ -377,6 +384,7 @@ fn check_struct_size(bytes: &[u8], l: &CLayout, loc: Option<Loc>) -> bool {
 
 pub fn call_foreign(
     sig: &ParsedSig,
+    cif: &Cif,
     symbol: *mut c_void,
     args: &[Object],
     loc: Option<Loc>,
@@ -389,14 +397,6 @@ pub fn call_foreign(
         );
         return Object::Null;
     }
-
-    let cif = Cif::new(
-        sig.args.iter().map(to_ffi_type).collect::<Vec<_>>(),
-        match &sig.ret {
-            Some(t) => to_ffi_type(t),
-            None => Type::void(),
-        },
-    );
 
     let mut cells: Vec<Box<Cell>> = vec![];
     let mut strings: Vec<CString> = vec![];
@@ -558,4 +558,3 @@ pub fn call_foreign(
         Some(t) => read_field(&ret_cell.0, t, 0),
     }
 }
-

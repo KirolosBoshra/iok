@@ -357,6 +357,7 @@ pub fn dlsym(args: Vec<Object>, interp: &mut Interpreter) -> Object {
                 symbol: *symbol,
                 lib: lib.clone(),
                 name: (**name).clone(),
+                cif: ffi::build_cif(&parsed),
                 sig: Rc::new(parsed),
             };
         }
@@ -365,9 +366,7 @@ pub fn dlsym(args: Vec<Object>, interp: &mut Interpreter) -> Object {
 }
 
 pub fn def_struct(args: Vec<Object>, interp: &mut Interpreter) -> Object {
-    if let (Some(Object::String(name)), Some(Object::String(spec))) =
-        (args.get(0), args.get(1))
-    {
+    if let (Some(Object::String(name)), Some(Object::String(spec))) = (args.get(0), args.get(1)) {
         let name_id = intern(&**name);
         let mut fields = vec![];
         for part in spec.split(',') {
@@ -402,9 +401,7 @@ pub fn def_struct(args: Vec<Object>, interp: &mut Interpreter) -> Object {
 }
 
 pub fn struct_val(args: Vec<Object>, interp: &mut Interpreter) -> Object {
-    if let (Some(Object::String(name)), Some(Object::List(vals))) =
-        (args.get(0), args.get(1))
-    {
+    if let (Some(Object::String(name)), Some(Object::List(vals))) = (args.get(0), args.get(1)) {
         let layout = match ffi::get_struct(intern(&**name)) {
             Some(l) => l,
             None => {

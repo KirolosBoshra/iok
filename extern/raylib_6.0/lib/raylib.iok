@@ -271,6 +271,44 @@ let color_alpha = ffi::sym(lib, "ColorAlpha", "Color, f32 -> Color")
 let color_from_hsv = ffi::sym(lib, "ColorFromHSV", "f32, f32, f32 -> Color")
 let color_from_normalized = ffi::sym(lib, "ColorFromNormalized", "Vector4 -> Color")
 
+// math — trig from the C runtime, everything else from raylib/raymath
+let math_lib = ffi::load("msvcrt.dll")
+if math_lib == null {
+    math_lib = ffi::load("ucrtbase.dll")
+}
+if math_lib == null {
+    write("C runtime (msvcrt/ucrtbase) not found — math bindings unavailable\n")
+    exit(1)
+}
+let sin = ffi::sym(math_lib, "sin", "f64 -> f64")
+let cos = ffi::sym(math_lib, "cos", "f64 -> f64")
+let sqrt = ffi::sym(math_lib, "sqrt", "f64 -> f64")
+let fabs = ffi::sym(math_lib, "fabs", "f64 -> f64")
+
+let set_random_seed = ffi::sym(lib, "SetRandomSeed", "u32 -> void")
+let get_random_value = ffi::sym(lib, "GetRandomValue", "i32, i32 -> i32")
+let clamp = ffi::sym(lib, "Clamp", "f32, f32, f32 -> f32")
+let wrap = ffi::sym(lib, "Wrap", "f32, f32, f32 -> f32")
+let lerp = ffi::sym(lib, "Lerp", "f32, f32, f32 -> f32")
+
+// raymath (compiled into raylib.dll)
+let vector2_rotate = ffi::sym(lib, "Vector2Rotate", "Vector2, f32 -> Vector2")
+let vector2_angle = ffi::sym(lib, "Vector2Angle", "Vector2, Vector2 -> f32")
+let vector2_length = ffi::sym(lib, "Vector2Length", "Vector2 -> f32")
+let vector2_distance = ffi::sym(lib, "Vector2Distance", "Vector2, Vector2 -> f32")
+let vector2_distance_sqr = ffi::sym(lib, "Vector2DistanceSqr", "Vector2, Vector2 -> f32")
+let vector2_normalize = ffi::sym(lib, "Vector2Normalize", "Vector2 -> Vector2")
+let vector2_add = ffi::sym(lib, "Vector2Add", "Vector2, Vector2 -> Vector2")
+let vector2_subtract = ffi::sym(lib, "Vector2Subtract", "Vector2, Vector2 -> Vector2")
+let vector2_scale = ffi::sym(lib, "Vector2Scale", "Vector2, f32 -> Vector2")
+let vector2_move_towards = ffi::sym(lib, "Vector2MoveTowards", "Vector2, Vector2, f32 -> Vector2")
+let vector2_clamp = ffi::sym(lib, "Vector2Clamp", "Vector2, Vector2, Vector2 -> Vector2")
+let vector2_lerp = ffi::sym(lib, "Vector2Lerp", "Vector2, Vector2, f32 -> Vector2")
+
+fn rand_int(a, b) => ret get_random_value(a, b)
+fn rand_range(a, b) => ret a + (b - a) * get_random_value(0, 100000) / 100000
+fn abs(v) => ret fabs(v)
+
 // input
 let is_key_down = ffi::sym(lib, "IsKeyDown", "i32 -> i32")
 let is_key_pressed = ffi::sym(lib, "IsKeyPressed", "i32 -> i32")

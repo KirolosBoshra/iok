@@ -1,4 +1,4 @@
-use crate::ffi::{CLayout, ParsedSig};
+use crate::ffi::{CLayout, Cif, ParsedSig};
 use crate::file_handler::FileHandler;
 use crate::interner::{intern, resolve};
 use crate::lexer::Loc;
@@ -29,7 +29,7 @@ lazy_static! {
     pub static ref M_REPLACE: u32 = intern("replace");
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Object {
     String(Rc<String>),
     Number(f64),
@@ -59,7 +59,7 @@ pub enum Object {
     },
     NameSpace {
         name: u32,
-        namespace: Box<FxHashMap<u32, Object>>,
+        namespace: Rc<FxHashMap<u32, Object>>,
     },
     Lib {
         path: String,
@@ -70,6 +70,7 @@ pub enum Object {
         lib: Rc<Library>,
         name: String,
         sig: Rc<ParsedSig>,
+        cif: Cif,
     },
     CStruct {
         layout: Arc<CLayout>,
@@ -133,7 +134,7 @@ impl Object {
                 struct_def: _,
                 ref mut fields,
             } => Rc::make_mut(fields).get_mut(name),
-            Object::NameSpace { namespace, .. } => namespace.get_mut(name),
+            Object::NameSpace { namespace, .. } => Rc::make_mut(namespace).get_mut(name),
             _ => None,
         }
     }
@@ -390,12 +391,14 @@ impl PartialEq for Object {
                     lib: l1,
                     name: n1,
                     sig: sig1,
+                    cif: _,
                 },
                 Object::ForeignFn {
                     symbol: s2,
                     lib: l2,
                     name: n2,
                     sig: sig2,
+                    cif: _,
                 },
             ) => s1 == s2 && Rc::ptr_eq(l1, l2) && n1 == n2 && Rc::ptr_eq(sig1, sig2),
             (
@@ -415,6 +418,12 @@ impl PartialEq for Object {
             (Object::Continue, Object::Continue) => true,
             _ => false,
         }
+    }
+}
+
+impl fmt::Debug for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
