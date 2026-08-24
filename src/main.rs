@@ -1,19 +1,9 @@
-mod ffi;
-mod file_handler;
-mod interner;
-mod interpreter;
-mod lexer;
-mod logger;
-mod object;
-mod parser;
-mod socket;
-mod std_native;
-
-use interpreter::Interpreter;
-use lexer::Lexer;
-use logger::Logger;
-use parser::Parser;
+use iok::interpreter::Interpreter;
+use iok::lexer::Lexer;
+use iok::logger::Logger;
+use iok::parser::Parser;
 use std::{env, fs::File, io, io::Read, io::Write, path::Path};
+
 fn interpret_mode(interpreter: &mut Interpreter) {
     let mut input = String::new();
     loop {
