@@ -1,6 +1,7 @@
 use crate::lexer::Loc;
 use lazy_static::lazy_static;
 use std::fmt;
+use std::process::exit;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -76,6 +77,10 @@ impl Logger {
             (Some(l), None) => eprintln!("{err} Error: {msg}\n\tat line {}:{}", l.y, l.x),
             (None, Some(src)) => eprintln!("{err} Error: {msg}\n\tin {}", src.name),
             (None, None) => eprintln!("{err} Error: {msg}"),
+        }
+
+        if source.is_some_and(|source| source.name != "<repl>") {
+            exit(-1);
         }
     }
 }
