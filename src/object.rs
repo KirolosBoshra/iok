@@ -105,6 +105,7 @@ impl Object {
             Object::String(s) => !s.is_empty(),
             Object::Number(num) => *num != 0.0,
             Object::Bool(b) => *b,
+            Object::List(list) => !list.is_empty(),
             _ => false,
         }
     }
@@ -213,7 +214,11 @@ impl Object {
                     if let Object::List(items) = self {
                         let joined = items
                             .iter()
-                            .map(|o| o.to_string())
+                            .map(|o| match o {
+                                // strings join raw; other types via Display
+                                Object::String(s) => s.as_str().to_string(),
+                                other => other.to_string(),
+                            })
                             .collect::<Vec<_>>()
                             .join(sep.as_str());
                         return Object::String(Rc::new(joined));
@@ -309,7 +314,14 @@ impl Object {
             Object::List(ref mut list) => {
                 list.push(obj);
             }
-            Object::String(ref mut s) => Rc::make_mut(s).push_str(&obj.to_string()),
+            Object::String(ref mut s) => {
+                // strings append raw; other types via Display
+                let piece = match &obj {
+                    Object::String(p) => p.as_str().to_string(),
+                    other => other.to_string(),
+                };
+                Rc::make_mut(s).push_str(&piece);
+            }
             _ => {}
         }
     }
@@ -487,6 +499,8 @@ impl Not for Object {
             Object::Number(num) => num == 0.0,
             Object::Bool(b) => !b,
             Object::String(string) => string.is_empty(),
+            Object::List(list) => list.is_empty(),
+            Object::Null => true,
             _ => false,
         }
     }

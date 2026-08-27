@@ -389,6 +389,22 @@ impl Interpreter {
                 self.bin_op(left_obj, op, right_obj)
             }
             Tree::CmpOp(left, op, right) => {
+                // && / || short-circuit: skip right side when left decides
+                match op {
+                    TokenType::And => {
+                        if !self.interpret(left).to_bool() {
+                            return Object::Bool(false);
+                        }
+                        return Object::Bool(self.interpret(right).to_bool());
+                    }
+                    TokenType::Or => {
+                        if self.interpret(left).to_bool() {
+                            return Object::Bool(true);
+                        }
+                        return Object::Bool(self.interpret(right).to_bool());
+                    }
+                    _ => {}
+                }
                 let left_obj = self.interpret(left);
                 let right_obj = self.interpret(right);
                 self.cmp_op(left_obj, op, right_obj)
@@ -612,6 +628,11 @@ impl Interpreter {
                 let mut struct_fields = FxHashMap::default();
                 let mut struct_methods = FxHashMap::default();
 
+                // evaluate fields/methods in a throwaway scope: Tree::Let and
+                // Tree::Fn side-effect-bind their names, which must not leak
+                // into the surrounding module (a leaked `print` from any
+                // struct hijacks io::println after a namespace merge)
+                self.enter_scope();
                 fields.iter().for_each(|field| {
                     if let Tree::Let(name, value) = &field.tree {
                         struct_fields.insert(*name, self.interpret(value));
@@ -628,6 +649,7 @@ impl Interpreter {
                         struct_methods.insert(*name, self.interpret(method));
                     }
                 });
+                self.exit_scope();
 
                 let def = Object::StructDef {
                     name: *struct_name,
@@ -639,8 +661,14 @@ impl Interpreter {
             }
 
             Tree::StructInit { name, fields } => {
-                let mut def = match self.get_var(name) {
-                    Some(obj) => obj.clone(),
+                // fall back to the enclosing module context so struct literals
+                // inside std modules (fs::File, net::Socket, ...) resolve
+                let def_obj = match self.get_var(name) {
+                    Some(obj) => Some(obj.clone()),
+                    None => self.lookup_module(name),
+                };
+                let mut def = match def_obj {
+                    Some(obj) => obj,
                     None => {
                         Logger::error(
                             &format!("Undefined struct: {}", resolve(*name)),

@@ -34,8 +34,9 @@ pub fn socket_read_all(args: Vec<Object>, _: &mut Interpreter) -> Object {
     }
 }
 
-pub fn native_exit(_args: Vec<Object>, _: &mut Interpreter) -> Object {
-    std::process::exit(0);
+pub fn native_exit(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    let code = args.first().map(|a| a.to_f64() as i32).unwrap_or(0);
+    std::process::exit(code);
 }
 
 pub fn native_chr(args: Vec<Object>, _: &mut Interpreter) -> Object {

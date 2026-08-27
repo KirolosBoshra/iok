@@ -665,7 +665,9 @@ impl Parser {
                 }
                 TokenType::Plus => self.parse_factor(iter),
                 TokenType::Minus => {
-                    let factor = self.parse_factor(iter);
+                    // parse at multiply precedence so member/index/call chains bind,
+                    // e.g. -self.x or -list[0], while binary +/- stay outside
+                    let factor = self.parse_binop(iter, 6);
                     Node {
                         tree: Tree::BinOp(
                             Box::new(Node {

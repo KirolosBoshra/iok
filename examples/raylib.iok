@@ -23,16 +23,16 @@ struct Ball {
     }
 
     fn bounce() => {
-        self.vel.y = 0 - self.vel.y
+        self.vel.y = -self.vel.y
     }
 
     fn reflect() => {
-        self.vel.x = (0 - self.vel.x) * 1.1
+        self.vel.x = (-self.vel.x) * 1.1
         if self.vel.x > 9 {
             self.vel.x = 9
         }
-        if self.vel.x < 0 - 9 {
-            self.vel.x = 0 - 9
+        if self.vel.x < -9 {
+            self.vel.x = -9
         }
     }
 
@@ -89,8 +89,8 @@ struct Paddle {
                 }
                 self.rec.y = self.rec.y + step
             } els {
-                if gap < 0 - 0.5 {
-                    let step = (0 - gap) * 0.2
+                if gap < -0.5 {
+                    let step = (-gap) * 0.2
                     if step > self.speed {
                         step = self.speed
                     }
@@ -181,7 +181,7 @@ while !rl::window_should_close() {
 
     if ball.pos.x < 0 {
         bot.score = bot.score + 1
-        ball.serve(400, 225, 0 - 1)
+        ball.serve(400, 225, -1)
     }
     if ball.pos.x > 800 {
         player.score = player.score + 1

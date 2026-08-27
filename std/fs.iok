@@ -7,7 +7,7 @@ struct File {
   }
 
   fn read_range(start, size) => {
-    ret __read_file_range(self.file, start, end)
+    ret __read_file_range(self.file, start, size)
   }
 
   fn write(data) => {
