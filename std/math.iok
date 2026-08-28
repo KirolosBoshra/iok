@@ -1,3 +1,6 @@
+let PI = 3.141592653589793
+let TAU = 6.283185307179586
+
 fn sin(n) => ret __math_sin(n)
 fn cos(n) => ret __math_cos(n)
 fn tan(n) => ret __math_tan(n)
@@ -32,5 +35,3 @@ fn rand(lo=null, hi=null) => {
     ret __math_rand(lo, hi)
 }
 fn rand_range(lo, hi) => ret __math_rand(lo, hi)
-fn PI() => ret 3.141592653589793
-fn TAU() => ret 6.283185307179586
