@@ -230,12 +230,20 @@ impl Interpreter {
             .and_then(|stack| stack.last_mut())
     }
 
-    // Fallback lookup into the innermost module-context map (module functions
-    // see their module's bindings without copying them into scope).
     fn lookup_module(&self, name: &u32) -> Option<Object> {
         for ctx in self.module_ctx.iter().rev().flatten() {
             if let Some(v) = ctx.get(name) {
                 return Some(v.clone());
+            }
+        }
+        // linear scan of alias namespaces
+        for stack in &self.vars {
+            for obj in stack.iter().rev() {
+                if let Object::NameSpace { namespace, .. } = obj {
+                    if let Some(v) = namespace.get(name) {
+                        return Some(v.clone());
+                    }
+                }
             }
         }
         None
@@ -941,7 +949,7 @@ impl Interpreter {
                     let leaf_id = *flat_path.last().unwrap();
                     let bind_name = alias.unwrap_or(leaf_id);
 
-                    // 6B: member import of a function also injects its sibling bindings
+                    // member import of a function also injects its sibling bindings
                     // so `import std::io::println` pulls `print`/`format` etc. without
                     // polluting the whole `std` namespace.
                     if matches!(current_obj, Object::Fn { .. }) {
@@ -993,6 +1001,11 @@ impl Interpreter {
                 };
                 matches!(value, Object::Number(n) if *n >= start && *n < end)
             }
+            Tree::Ident(id) => self
+                .get_var(id)
+                .cloned()
+                .or_else(|| self.lookup_module(id))
+                .is_some_and(|v| value == &v),
             _ => false,
         }
     }
@@ -1178,8 +1191,11 @@ impl Interpreter {
     }
     fn eval_namespace(&self, path: String, parsed_trees: &Vec<Node>) -> FxHashMap<u32, Object> {
         let mut namespace = FxHashMap::default();
-        let mut mod_interpreter =
-            Interpreter::new(path, Option::Some(self.std_path.clone()), self.script_args.clone());
+        let mut mod_interpreter = Interpreter::new(
+            path,
+            Option::Some(self.std_path.clone()),
+            self.script_args.clone(),
+        );
         parsed_trees.iter().for_each(|ast| {
             mod_interpreter.interpret(ast);
         });

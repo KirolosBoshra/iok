@@ -12,3 +12,14 @@ fn assert(cond, msg) => {
     exit(1)
   }
 }
+fn is_digit(c) => {
+  let o = c.ord(0)
+  ret o >= 48 && o <= 57
+}
+
+fn is_alpha(c) => {
+  let o = c.ord(0)
+  ret o >= 65 && o <= 90 || o >= 97 && o <= 122 || o == 95
+}
+
+fn is_alnum(c) => ret is_alpha(c) || is_digit(c)

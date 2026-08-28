@@ -446,7 +446,7 @@ impl Parser {
         self.parse_delimited(
             iter,
             TokenType::CloseSquare,
-            Parser::parse_factor,
+            Parser::parse_expression,
             "Expected ] Or Items [..]",
         )
     }
