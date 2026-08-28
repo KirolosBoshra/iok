@@ -1,0 +1,33 @@
+import std::io
+import std::fs
+import std::env
+import "lexer.iok" @ lexer
+import "parser.iok" @ parser
+import "interpreter.iok"
+
+if env::args().len() < 2 {
+  io::println("Usage: iok main.iok <source_file>")
+  exit(1)
+}
+
+let program = fs::open(env::args()[1]).read()
+
+let tokens = lexer::tokenize(program)
+
+io::println("=" * 20)
+io::println("Tokens:")
+for t -> tokens {
+  io::println(t.to_string())
+}
+
+let trees = parser::parse(tokens)
+
+io::println("=" * 20)
+io::println("Parse Trees:")
+for t -> trees {
+  io::println(t.to_string())
+}
+
+io::println("=" * 20)
+io::println("Interpreter Output:")
+interpret(trees)

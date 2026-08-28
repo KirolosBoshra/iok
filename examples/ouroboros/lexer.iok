@@ -1,0 +1,90 @@
+import std @ std
+let TOKEN_INDEX = 0
+
+let TOKEN = () => {
+  let cur = TOKEN_INDEX
+  TOKEN_INDEX++
+  ret cur
+}
+
+let TOKEN_NUMBER = TOKEN()
+let TOKEN_STRING = TOKEN()
+let TOKEN_IDENT = TOKEN() 
+let TOKEN_LET = TOKEN()
+let TOKEN_EQ = TOKEN()
+let TOKEN_PLUS = TOKEN()
+let TOKEN_MINUS = TOKEN()
+
+struct Token {
+  let type
+  let value
+
+  fn new(type, value) => {
+    ret Token { type: type, value: value }
+  }
+
+  fn to_string() => {
+    let type_str = ""
+    match self.type {
+      TOKEN_NUMBER => type_str = "NUMBER"
+      TOKEN_STRING => type_str = "STRING"
+      TOKEN_IDENT => type_str = "IDENT"
+      TOKEN_LET => type_str = "LET"
+      TOKEN_EQ => type_str = "EQ"
+      TOKEN_PLUS => type_str = "PLUS"
+      TOKEN_MINUS => type_str = "MINUS"
+      _ => type_str = "UNKNOWN"
+    }
+    ret "Token(type: " + type_str + ", value: " + self.value + ")"
+  }
+}
+
+fn tokenize(input) => {
+  let tokens = []
+  let i = 0
+  while i < input.len() {
+    let char = input[i]
+    match char {
+      "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" => {
+        let num = char
+        while i + 1 < input.len() && std::is_digit(input[i + 1]) {
+          num += input[i + 1]
+          i++
+        }
+        tokens.push(Token::new(TOKEN_NUMBER, num))
+      }
+      "+" => tokens.push(Token::new(TOKEN_PLUS, char))
+      "-" => tokens.push(Token::new(TOKEN_MINUS, char))
+      "=" => tokens.push(Token::new(TOKEN_EQ, char))
+      " ", "\n", "\r" => ()
+      "\"" => {
+        let str_val = ""
+        i++
+        while i < input.len() && input[i] != "\"" {
+          str_val += input[i]
+          i++
+        }
+        tokens.push(Token::new(TOKEN_STRING, str_val))
+      }
+      _ => {
+        if std::is_alpha(char) {
+          let ident = char
+          while i + 1 < input.len() && std::is_alnum(input[i + 1]) {
+            ident += input[i + 1]
+            i++
+          }
+          if ident == "let" {
+            tokens.push(Token::new(TOKEN_LET, ident))
+          } els {
+            tokens.push(Token::new(TOKEN_IDENT, ident))
+          }
+        } els {
+          io::println("Found unknown: " + char)
+          exit(1)
+        }
+      }
+    }
+    i++
+  }
+  ret tokens
+}

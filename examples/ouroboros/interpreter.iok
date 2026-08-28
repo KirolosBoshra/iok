@@ -1,0 +1,75 @@
+import "parser.iok" @ parser
+import std::io
+
+let env_names = []
+let env_vals = []
+
+fn find(name) => {
+  for i -> 0..env_names.len() {
+    if env_names[i] == name {
+      ret i
+    }
+  }
+  ret null
+}
+
+fn get_var(name) => {
+  let idx = find(name)
+  if idx == null { ret null }
+  ret env_vals[idx]
+}
+
+fn set_var(name, val) => {
+  let idx = find(name)
+  if idx == null {
+    env_names.push(name)
+    env_vals.push(val)
+  } els {
+    env_vals[idx] = val
+  }
+  ret val
+}
+
+fn eval_node(node) => {
+  if node.type == parser::TREE_NUMBER {
+    ret node.value.to_number()
+  }
+  elsif node.type == parser::TREE_STRING {
+    ret node.value
+  }
+  elsif node.type == parser::TREE_IDENT {
+    ret get_var(node.value)
+  }
+  elsif node.type == parser::TREE_BINOP {
+    let left = eval_node(node.value[0])
+    let op = node.value[1]
+    let right = eval_node(node.value[2])
+    if op == "+" { ret left + right }
+    if op == "-" { ret left - right }
+    ret null
+  }
+  elsif node.type == parser::TREE_LET {
+    let name = node.value[0]
+    let v = eval_node(node.value[1])
+    set_var(name, v)
+    ret v
+  }
+  elsif node.type == parser::TREE_ASSIGN {
+    let name = node.value[0]
+    let v = eval_node(node.value[1])
+    set_var(name, v)
+    ret v
+  }
+  els {
+    ret null
+  }
+}
+
+fn interpret(trees) => {
+  let last = null
+  for n -> trees {
+    last = eval_node(n)
+    io::println(n.to_string() + " => " + last)
+  }
+  ret last
+}

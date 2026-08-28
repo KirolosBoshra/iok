@@ -1,0 +1,110 @@
+import "lexer.iok" @ lexer
+
+let TREE_TYPE_INDEX = 0
+let TREE_TYPE = () => {
+  let cur = TREE_TYPE_INDEX
+  TREE_TYPE_INDEX++
+  ret cur
+}
+
+let TREE_LET = TREE_TYPE()
+let TREE_ASSIGN = TREE_TYPE()
+let TREE_BINOP = TREE_TYPE()
+let TREE_NUMBER = TREE_TYPE()
+let TREE_STRING = TREE_TYPE()
+let TREE_IDENT = TREE_TYPE()
+
+fn is_binary_op(tok) => ret tok.type == lexer::TOKEN_PLUS || tok.type == lexer::TOKEN_MINUS
+
+fn parse_primary(tokens, pos) => {
+  if pos >= tokens.len() { ret [null, pos] }
+  let tok = tokens[pos]
+  if tok.type == lexer::TOKEN_NUMBER {
+    ret [TreeNode { type: TREE_NUMBER, value: tok.value }, pos + 1]
+  }
+  elsif tok.type == lexer::TOKEN_STRING {
+    ret [TreeNode { type: TREE_STRING, value: tok.value }, pos + 1]
+  }
+  elsif tok.type == lexer::TOKEN_IDENT {
+    ret [TreeNode { type: TREE_IDENT, value: tok.value }, pos + 1]
+  }
+  els {
+    ret [null, pos + 1]
+  }
+}
+
+fn parse_expr(tokens, pos) => {
+  let left_res = parse_primary(tokens, pos)
+  let left = left_res[0]
+  let cur = left_res[1]
+  if left == null { ret [null, cur] }
+  while cur < tokens.len() && is_binary_op(tokens[cur]) {
+    let op = tokens[cur].value
+    let right_res = parse_primary(tokens, cur + 1)
+    let right = right_res[0]
+    if right == null { break }
+    left = TreeNode { type: TREE_BINOP, value: [left, op, right] }
+    cur = right_res[1]
+  }
+  ret [left, cur]
+}
+
+struct TreeNode {
+  let type
+  let value
+
+  fn to_string() => {
+    let s = ""
+    match self.type {
+      TREE_LET => {
+        let name = self.value[0]
+        let expr = self.value[1]
+        s = "LET(" + name + " = " + expr.to_string() + ")"
+      }
+      TREE_ASSIGN => {
+        let name = self.value[0]
+        let expr = self.value[1]
+        s = "ASSIGN(" + name + " = " + expr.to_string() + ")"
+      }
+      TREE_BINOP => {
+        let left = self.value[0]
+        let op = self.value[1]
+        let right = self.value[2]
+        s = "BINOP(" + left.to_string() + " " + op + " " + right.to_string() + ")"
+      }
+      TREE_NUMBER => s = "NUMBER(" + self.value + ")"
+      TREE_STRING => s = "STRING(" + self.value + ")"
+      TREE_IDENT => s = "IDENT(" + self.value + ")"
+      _ => s = "UNKNOWN"
+    }
+    ret s
+  }
+}
+
+  fn parse(tokens) => {
+    let trees = []
+    let i = 0
+    while i < tokens.len() {
+      let tok = tokens[i]
+      if tok.type == lexer::TOKEN_LET {
+        let name = tokens[i + 1].value
+        let expr_res = parse_expr(tokens, i + 3)
+        trees.push(TreeNode { type: TREE_LET, value: [name, expr_res[0]] })
+        i = expr_res[1]
+      } elsif tok.type == lexer::TOKEN_IDENT && i + 1 < tokens.len() && tokens[i + 1].type == lexer::TOKEN_EQ {
+        let name = tok.value
+        let expr_res = parse_expr(tokens, i + 2)
+        trees.push(TreeNode { type: TREE_ASSIGN, value: [name, expr_res[0]] })
+        i = expr_res[1]
+      } els {
+      let expr_res = parse_expr(tokens, i)
+      if expr_res[0] != null {
+        trees.push(expr_res[0])
+      }
+      let next = expr_res[1]
+      if next == i { i++ } els { i = next }
+    }
+  }
+  ret trees
+}
+
