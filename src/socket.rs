@@ -84,8 +84,8 @@ impl fmt::Display for Socket {
 }
 
 impl Socket {
-    pub fn new_connect(address: String, port: u16) -> Socket {
-        Socket::Handler(SocketHandler::new(address, port))
+    pub fn new_connect(address: String, port: u16) -> Result<Socket, std::io::Error> {
+        Ok(Socket::Handler(SocketHandler::new(address, port)?))
     }
 
     pub fn new_bind(address: String, port: u16) -> Result<Socket, std::io::Error> {
@@ -157,21 +157,25 @@ impl Socket {
 }
 
 impl SocketHandler {
-    pub fn new(address: String, port: u16) -> Self {
-        let stream = TcpStream::connect(format!("{}:{}", address, port)).unwrap();
-        stream.set_read_timeout(Some(Duration::from_millis(5000))).ok();
+    pub fn new(address: String, port: u16) -> Result<Self, std::io::Error> {
+        let stream = TcpStream::connect(format!("{}:{}", address, port))?;
+        stream
+            .set_read_timeout(Some(Duration::from_millis(5000)))
+            .ok();
         let arc_stream = Arc::new(Mutex::new(BufReader::new(stream)));
         let id = arc_stream.as_ref() as *const Mutex<BufReader<TcpStream>> as usize;
-        SocketHandler {
+        Ok(SocketHandler {
             address,
             port,
             stream: arc_stream,
             id,
-        }
+        })
     }
 
     pub fn from_stream(stream: TcpStream) -> Self {
-        stream.set_read_timeout(Some(Duration::from_millis(5000))).ok();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(5000)))
+            .ok();
         let arc_stream = Arc::new(Mutex::new(BufReader::new(stream)));
         let id = arc_stream.as_ref() as *const Mutex<BufReader<TcpStream>> as usize;
         SocketHandler {

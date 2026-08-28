@@ -1,0 +1,36 @@
+fn sin(n) => ret __math_sin(n)
+fn cos(n) => ret __math_cos(n)
+fn tan(n) => ret __math_tan(n)
+fn asin(n) => ret __math_asin(n)
+fn acos(n) => ret __math_acos(n)
+fn atan(n) => ret __math_atan(n)
+fn atan2(y, x) => ret __math_atan2(y, x)
+fn sqrt(n) => ret __math_sqrt(n)
+fn pow(a, b) => ret __math_pow(a, b)
+fn exp(n) => ret __math_exp(n)
+fn ln(n) => ret __math_ln(n)
+fn log10(n) => ret __math_log10(n)
+fn abs(n) => ret __math_abs(n)
+fn floor(n) => ret __math_floor(n)
+fn ceil(n) => ret __math_ceil(n)
+fn round(n) => ret __math_round(n)
+fn trunc(n) => ret __math_trunc(n)
+fn sinh(n) => ret __math_sinh(n)
+fn cosh(n) => ret __math_cosh(n)
+fn tanh_fn(n) => ret __math_tanh(n)
+fn hypot(a, b) => ret __math_hypot(a, b)
+fn min(a, b) => ret __math_min(a, b)
+fn max(a, b) => ret __math_max(a, b)
+fn clamp(v, lo, hi) => ret __math_clamp(v, lo, hi)
+fn rand(lo=null, hi=null) => {
+    if lo == null {
+        ret __math_rand()
+    }
+    if hi == null {
+        ret __math_rand(lo)
+    }
+    ret __math_rand(lo, hi)
+}
+fn rand_range(lo, hi) => ret __math_rand(lo, hi)
+fn PI() => ret 3.141592653589793
+fn TAU() => ret 6.283185307179586

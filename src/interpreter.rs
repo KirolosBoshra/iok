@@ -37,6 +37,7 @@ pub struct Interpreter {
     current_path: String,
     std_path: String,
     pub current_loc: Option<Loc>,
+    pub script_args: Vec<String>,
 }
 
 macro_rules! register_native {
@@ -52,7 +53,7 @@ macro_rules! register_native {
 }
 
 impl Interpreter {
-    pub fn new(current_path: String, std: Option<String>) -> Self {
+    pub fn new(current_path: String, std: Option<String>, script_args: Vec<String>) -> Self {
         let std_path = if let Some(path) = std {
             path
         } else {
@@ -126,6 +127,43 @@ impl Interpreter {
         register_native!(base_scope, "__set_field", std_native::set_field);
         register_native!(base_scope, "__byref", std_native::byref);
         register_native!(base_scope, "__nullptr", std_native::null_ptr);
+        // ── math
+        register_native!(base_scope, "__math_sin", std_native::math_sin);
+        register_native!(base_scope, "__math_cos", std_native::math_cos);
+        register_native!(base_scope, "__math_tan", std_native::math_tan);
+        register_native!(base_scope, "__math_asin", std_native::math_asin);
+        register_native!(base_scope, "__math_acos", std_native::math_acos);
+        register_native!(base_scope, "__math_atan", std_native::math_atan);
+        register_native!(base_scope, "__math_atan2", std_native::math_atan2);
+        register_native!(base_scope, "__math_sqrt", std_native::math_sqrt);
+        register_native!(base_scope, "__math_pow", std_native::math_pow);
+        register_native!(base_scope, "__math_exp", std_native::math_exp);
+        register_native!(base_scope, "__math_ln", std_native::math_ln);
+        register_native!(base_scope, "__math_log10", std_native::math_log10);
+        register_native!(base_scope, "__math_abs", std_native::math_abs);
+        register_native!(base_scope, "__math_floor", std_native::math_floor);
+        register_native!(base_scope, "__math_ceil", std_native::math_ceil);
+        register_native!(base_scope, "__math_round", std_native::math_round);
+        register_native!(base_scope, "__math_trunc", std_native::math_trunc);
+        register_native!(base_scope, "__math_sinh", std_native::math_sinh);
+        register_native!(base_scope, "__math_cosh", std_native::math_cosh);
+        register_native!(base_scope, "__math_tanh", std_native::math_tanh);
+        register_native!(base_scope, "__math_hypot", std_native::math_hypot);
+        register_native!(base_scope, "__math_min", std_native::math_min);
+        register_native!(base_scope, "__math_max", std_native::math_max);
+        register_native!(base_scope, "__math_clamp", std_native::math_clamp);
+        register_native!(base_scope, "__math_rand", std_native::math_rand);
+        register_native!(base_scope, "__math_rand_range", std_native::math_rand_range);
+        // ── time
+        register_native!(base_scope, "__time_now", std_native::time_now);
+        register_native!(base_scope, "__time_millis", std_native::time_millis);
+        register_native!(base_scope, "__time_sleep", std_native::time_sleep);
+        // ── env
+        register_native!(base_scope, "__env_args", std_native::env_args);
+        register_native!(base_scope, "__env_raw_args", std_native::env_raw_args);
+        register_native!(base_scope, "__env_var", std_native::env_var);
+        register_native!(base_scope, "__env_cwd", std_native::env_cwd);
+        register_native!(base_scope, "__env_set_var", std_native::env_set_var);
 
         let max_id = base_scope.keys().max().copied().unwrap_or(0);
         let mut vars = vec![Vec::new(); max_id as usize + 1];
@@ -143,6 +181,7 @@ impl Interpreter {
             current_path,
             std_path,
             current_loc: None,
+            script_args,
         }
     }
 
@@ -861,30 +900,61 @@ impl Interpreter {
                     let mut scope = root_namespace;
 
                     let mut current_obj = Object::Null;
+                    let mut failed = false;
                     for (i, seg) in flat_path.iter().enumerate().skip(1) {
-                        let val = scope
-                            .get(seg)
-                            .unwrap_or_else(|| {
-                                let joined = flat_path[..i]
-                                    .iter()
-                                    .map(|id| resolve(*id))
-                                    .collect::<Vec<_>>()
-                                    .join("::");
-                                panic!("`{}` not found in `{}`", resolve(*seg), joined)
-                            })
-                            .clone();
+                        let Some(val) = scope.get(seg).cloned() else {
+                            let joined = flat_path[..i]
+                                .iter()
+                                .map(|id| resolve(*id))
+                                .collect::<Vec<_>>()
+                                .join("::");
+                            Logger::error(
+                                &format!("`{}` not found in `{}`", resolve(*seg), joined),
+                                Some(node.loc),
+                                ErrorType::RunTime,
+                            );
+                            failed = true;
+                            break;
+                        };
                         if i < flat_path.len() - 1 {
                             match val {
                                 Object::NameSpace { namespace, .. } => {
                                     scope = namespace.as_ref().clone(); // enter that namespace
                                 }
-                                _ => panic!("`{}` is not a namespace", resolve(*seg)),
+                                _ => {
+                                    Logger::error(
+                                        &format!("`{}` is not a namespace", resolve(*seg)),
+                                        Some(node.loc),
+                                        ErrorType::RunTime,
+                                    );
+                                    failed = true;
+                                    break;
+                                }
                             }
                         } else {
                             current_obj = val;
                         }
                     }
-                    let bind_name = alias.map(|a| a).unwrap_or(*flat_path.last().unwrap());
+                    if failed {
+                        return Object::Null;
+                    }
+                    let leaf_id = *flat_path.last().unwrap();
+                    let bind_name = alias.unwrap_or(leaf_id);
+
+                    // 6B: member import of a function also injects its sibling bindings
+                    // so `import std::io::println` pulls `print`/`format` etc. without
+                    // polluting the whole `std` namespace.
+                    if matches!(current_obj, Object::Fn { .. }) {
+                        let scope_clone = scope.clone();
+                        for (k, v) in scope_clone.iter() {
+                            if *k == leaf_id {
+                                continue;
+                            }
+                            if self.get_var(k).is_none() && self.lookup_module(k).is_none() {
+                                self.set_var(*k, v.clone());
+                            }
+                        }
+                    }
 
                     self.set_var(bind_name, current_obj);
                     return Object::Null;
@@ -1108,7 +1178,8 @@ impl Interpreter {
     }
     fn eval_namespace(&self, path: String, parsed_trees: &Vec<Node>) -> FxHashMap<u32, Object> {
         let mut namespace = FxHashMap::default();
-        let mut mod_interpreter = Interpreter::new(path, Option::Some(self.std_path.clone()));
+        let mut mod_interpreter =
+            Interpreter::new(path, Option::Some(self.std_path.clone()), self.script_args.clone());
         parsed_trees.iter().for_each(|ast| {
             mod_interpreter.interpret(ast);
         });

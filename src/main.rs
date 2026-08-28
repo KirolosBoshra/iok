@@ -42,13 +42,14 @@ fn main() {
             .to_str()
             .unwrap()
             .to_string();
-        interpret_mode(&mut Interpreter::new(path, None));
+        interpret_mode(&mut Interpreter::new(path, None, Vec::new()));
     }
 
     let args: Vec<String> = env::args().skip(1).collect();
 
     let mut std_path: Option<String> = None;
     let mut file_name: Option<String> = None;
+    let mut file_idx: Option<usize> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -63,12 +64,24 @@ fn main() {
                 }
             }
             arg if arg.ends_with(".iok") => {
-                file_name = Some(arg.to_string());
+                if file_name.is_none() {
+                    file_name = Some(arg.to_string());
+                    file_idx = Some(i);
+                }
             }
             _ => {}
         }
         i += 1;
     }
+
+    let script_args: Vec<String> = match (&file_name, file_idx) {
+        (Some(name), Some(idx)) => {
+            let mut v = vec![name.clone()];
+            v.extend_from_slice(&args[idx + 1..]);
+            v
+        }
+        _ => Vec::new(),
+    };
 
     if file_name.is_none() {
         let path = env::current_dir()
@@ -76,7 +89,7 @@ fn main() {
             .to_str()
             .unwrap()
             .to_string();
-        let mut vm = Interpreter::new(path, std_path);
+        let mut vm = Interpreter::new(path, std_path, script_args);
         interpret_mode(&mut vm);
     } else {
         let file_name = file_name.unwrap().clone();
@@ -110,7 +123,7 @@ fn main() {
             String::from("/")
         };
 
-        let mut interpreter = Interpreter::new(path, std_path);
+        let mut interpreter = Interpreter::new(path, std_path, script_args);
 
         parsed_tree.iter().for_each(|stmt| {
             interpreter.interpret(stmt);

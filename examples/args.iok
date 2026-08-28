@@ -1,0 +1,17 @@
+import std::env
+import std::io
+
+let a = env::args()
+io::println("a len " + a.len())
+
+for i -> 0..a.len() {
+    io::println("a[{i}] = [" + a[i] + "] len " + a[i].len())
+}
+
+let raw = env::raw_args()
+io::println("raw len " + raw.len())
+
+for i -> 0..raw.len() {
+    io::println("raw[{i}] = [" + raw[i] + "] len " + raw[i].len())
+}
+

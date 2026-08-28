@@ -156,10 +156,14 @@ impl Object {
         }
     }
 
-    pub fn set_list_index(&mut self, i: usize, value: Object) {
+    pub fn set_list_index(&mut self, i: usize, value: Object) -> bool {
         match self {
             Object::List(list) => {
-                list[i] = value;
+                if i < list.len() {
+                    list[i] = value;
+                    return true;
+                }
+                return false;
             }
             Object::String(s) => {
                 let s = Rc::make_mut(s);
@@ -171,9 +175,11 @@ impl Object {
                 // Replace one character at position i:
                 if let Object::String(v) = value {
                     s.replace_range(i..i + 1, &v);
+                    return true;
                 }
+                return false;
             }
-            _ => {}
+            _ => false,
         }
     }
 
@@ -328,11 +334,15 @@ impl Object {
 
     pub fn pop(&mut self) -> Object {
         match self {
-            Object::List(ref mut list) => list.pop().expect("List is empty"),
-            Object::String(ref mut s) => Object::String(Rc::new(
-                Rc::make_mut(s).pop().expect("String is Empty").to_string(),
-            )),
-            _ => Object::Invalid,
+            Object::List(ref mut list) => list.pop().unwrap_or(Object::Null),
+            Object::String(ref mut s) => {
+                let ch = Rc::make_mut(s).pop();
+                match ch {
+                    Some(c) => Object::String(Rc::new(c.to_string())),
+                    None => Object::Null,
+                }
+            }
+            _ => Object::Null,
         }
     }
 }

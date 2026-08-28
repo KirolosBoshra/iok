@@ -1,0 +1,3 @@
+fn now() => ret __time_now()
+fn millis() => ret __time_millis()
+fn sleep(ms) => ret __time_sleep(ms)

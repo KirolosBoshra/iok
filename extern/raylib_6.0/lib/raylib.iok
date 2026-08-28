@@ -271,24 +271,6 @@ let color_alpha = ffi::sym(lib, "ColorAlpha", "Color, f32 -> Color")
 let color_from_hsv = ffi::sym(lib, "ColorFromHSV", "f32, f32, f32 -> Color")
 let color_from_normalized = ffi::sym(lib, "ColorFromNormalized", "Vector4 -> Color")
 
-// math — trig from the C runtime, everything else from raylib/raymath
-let math_lib = ffi::load("msvcrt.dll")
-if math_lib == null {
-    math_lib = ffi::load("ucrtbase.dll")
-}
-if math_lib == null {
-    write("C runtime (msvcrt/ucrtbase) not found — math bindings unavailable\n")
-    exit(1)
-}
-let sin = ffi::sym(math_lib, "sin", "f64 -> f64")
-let cos = ffi::sym(math_lib, "cos", "f64 -> f64")
-let sqrt = ffi::sym(math_lib, "sqrt", "f64 -> f64")
-let fabs = ffi::sym(math_lib, "fabs", "f64 -> f64")
-let floor = ffi::sym(math_lib, "floor", "f64 -> f64")
-let ceil = ffi::sym(math_lib, "ceil", "f64 -> f64")
-let atan2 = ffi::sym(math_lib, "atan2", "f64, f64 -> f64")
-let tanh_fn = ffi::sym(math_lib, "tanh", "f64 -> f64")
-
 let set_random_seed = ffi::sym(lib, "SetRandomSeed", "u32 -> void")
 let get_random_value = ffi::sym(lib, "GetRandomValue", "i32, i32 -> i32")
 let clamp = ffi::sym(lib, "Clamp", "f32, f32, f32 -> f32")
@@ -311,7 +293,6 @@ let vector2_lerp = ffi::sym(lib, "Vector2Lerp", "Vector2, Vector2, f32 -> Vector
 
 fn rand_int(a, b) => ret get_random_value(a, b)
 fn rand_range(a, b) => ret a + (b - a) * get_random_value(0, 100000) / 100000
-fn abs(v) => ret fabs(v)
 
 // input
 let is_key_down = ffi::sym(lib, "IsKeyDown", "i32 -> i32")

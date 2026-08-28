@@ -218,7 +218,10 @@ pub fn append_file(args: Vec<Object>, _: &mut Interpreter) -> Object {
 pub fn socket_connect(args: Vec<Object>, _: &mut Interpreter) -> Object {
     if let (Some(Object::String(address)), Some(Object::Number(port))) = (args.get(0), args.get(1))
     {
-        Object::Socket(Socket::new_connect((**address).clone(), *port as u16))
+        match Socket::new_connect((**address).clone(), *port as u16) {
+            Ok(socket) => Object::Socket(socket),
+            Err(_) => Object::Null,
+        }
     } else {
         Object::Null
     }
@@ -467,4 +470,172 @@ pub fn byref(args: Vec<Object>, _: &mut Interpreter) -> Object {
 
 pub fn null_ptr(_: Vec<Object>, _: &mut Interpreter) -> Object {
     Object::Ptr(std::ptr::null_mut())
+}
+
+// math
+fn narg(args: &[Object], i: usize) -> Option<f64> {
+    match args.get(i) {
+        Some(Object::Number(n)) => Some(*n),
+        _ => None,
+    }
+}
+macro_rules! math1 {
+    ($name:ident, $expr:expr) => {
+        pub fn $name(args: Vec<Object>, _: &mut Interpreter) -> Object {
+            if let Some(n) = narg(&args, 0) {
+                Object::Number($expr(n))
+            } else {
+                Object::Null
+            }
+        }
+    };
+}
+math1!(math_sin, f64::sin);
+math1!(math_cos, f64::cos);
+math1!(math_tan, f64::tan);
+math1!(math_asin, f64::asin);
+math1!(math_acos, f64::acos);
+math1!(math_atan, f64::atan);
+math1!(math_sqrt, f64::sqrt);
+math1!(math_exp, f64::exp);
+math1!(math_ln, f64::ln);
+math1!(math_log10, f64::log10);
+math1!(math_abs, f64::abs);
+math1!(math_floor, f64::floor);
+math1!(math_ceil, f64::ceil);
+math1!(math_round, f64::round);
+math1!(math_trunc, f64::trunc);
+math1!(math_sinh, f64::sinh);
+math1!(math_cosh, f64::cosh);
+math1!(math_tanh, f64::tanh);
+
+pub fn math_pow(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(a), Some(b)) = (narg(&args, 0), narg(&args, 1)) {
+        Object::Number(a.powf(b))
+    } else {
+        Object::Null
+    }
+}
+pub fn math_atan2(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(y), Some(x)) = (narg(&args, 0), narg(&args, 1)) {
+        Object::Number(y.atan2(x))
+    } else {
+        Object::Null
+    }
+}
+pub fn math_hypot(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(a), Some(b)) = (narg(&args, 0), narg(&args, 1)) {
+        Object::Number(a.hypot(b))
+    } else {
+        Object::Null
+    }
+}
+pub fn math_min(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(a), Some(b)) = (narg(&args, 0), narg(&args, 1)) {
+        Object::Number(a.min(b))
+    } else {
+        Object::Null
+    }
+}
+pub fn math_max(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(a), Some(b)) = (narg(&args, 0), narg(&args, 1)) {
+        Object::Number(a.max(b))
+    } else {
+        Object::Null
+    }
+}
+pub fn math_clamp(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(v), Some(lo), Some(hi)) = (narg(&args, 0), narg(&args, 1), narg(&args, 2)) {
+        Object::Number(v.clamp(lo, hi))
+    } else {
+        Object::Null
+    }
+}
+pub fn math_rand(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    if args.is_empty() {
+        Object::Number(rng.gen::<f64>())
+    } else if let (Some(lo), Some(hi)) = (narg(&args, 0), narg(&args, 1)) {
+        if hi <= lo {
+            Object::Number(lo)
+        } else {
+            Object::Number(rng.gen_range(lo..hi))
+        }
+    } else if let Some(hi) = narg(&args, 0) {
+        Object::Number(rng.gen_range(0.0..hi))
+    } else {
+        Object::Null
+    }
+}
+pub fn math_rand_range(args: Vec<Object>, interp: &mut Interpreter) -> Object {
+    math_rand(args, interp)
+}
+
+// time
+pub fn time_now(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    let _ = args;
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+    Object::Number(secs)
+}
+pub fn time_millis(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    let _ = args;
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as f64)
+        .unwrap_or(0.0);
+    Object::Number(ms)
+}
+pub fn time_sleep(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(ms) = narg(&args, 0) {
+        std::thread::sleep(std::time::Duration::from_millis(ms.max(0.0) as u64));
+        Object::Bool(true)
+    } else {
+        Object::Null
+    }
+}
+
+// env / process
+pub fn env_args(_args: Vec<Object>, vm: &mut Interpreter) -> Object {
+    Object::List(
+        vm.script_args
+            .iter()
+            .map(|s| Object::String(Rc::new(s.clone())))
+            .collect(),
+    )
+}
+pub fn env_raw_args(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    let _ = args;
+    Object::List(
+        std::env::args()
+            .map(|s| Object::String(Rc::new(s)))
+            .collect(),
+    )
+}
+pub fn env_var(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let Some(Object::String(name)) = args.get(0) {
+        std::env::var(&**name)
+            .map(|v| Object::String(Rc::new(v)))
+            .unwrap_or(Object::Null)
+    } else {
+        Object::Null
+    }
+}
+pub fn env_cwd(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    let _ = args;
+    std::env::current_dir()
+        .map(|p| Object::String(Rc::new(p.to_string_lossy().into_owned())))
+        .unwrap_or(Object::Null)
+}
+pub fn env_set_var(args: Vec<Object>, _: &mut Interpreter) -> Object {
+    if let (Some(Object::String(k)), Some(Object::String(v))) = (args.get(0), args.get(1)) {
+        // SAFETY: single-threaded interpreter, no concurrent env access
+        unsafe { std::env::set_var(&**k, &**v) };
+        Object::Bool(true)
+    } else {
+        Object::Null
+    }
 }
