@@ -1,8 +1,8 @@
 let x = 30 + 4 - 2
 let y = "Hello"
 
-x = 64
-
 x
+y
 
-y 
+x = 64
+x 

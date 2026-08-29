@@ -609,22 +609,13 @@ impl Parser {
                         if p.token == TokenType::OpenCurly {
                             let mut clone = iter.clone();
                             clone.next(); // skip the `{`
-                                          // now the next token in `clone` should be Ident(fieldName)
-                                          // and the one after that should be a Colon.
-                            let is_struct_syntax = clone
-                                .next()
-                                .map(|t| match &t.token {
-                                    TokenType::Ident(_) => true,
-                                    _ => false,
-                                })
-                                .unwrap_or(false)
-                                && clone
+                            let is_struct_syntax = match clone.next().map(|t| &t.token) {
+                                Some(TokenType::CloseCurly) => true, // S {} empty literal
+                                Some(TokenType::Ident(_)) => clone
                                     .next()
-                                    .map(|t| match &t.token {
-                                        TokenType::Colon => true,
-                                        _ => false,
-                                    })
-                                    .unwrap_or(false);
+                                    .is_some_and(|t| t.token == TokenType::Colon),
+                                _ => false,
+                            };
 
                             if is_struct_syntax {
                                 // we really do have `Ident { field1: … }`
