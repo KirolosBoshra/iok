@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
+    iok::logger::Logger::set_lsp_mode(true);
     let (connection, io_threads) = Connection::stdio();
 
     let server_capabilities = serde_json::to_value(ServerCapabilities {

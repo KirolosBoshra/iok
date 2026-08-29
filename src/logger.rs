@@ -2,8 +2,10 @@ use crate::lexer::Loc;
 use lazy_static::lazy_static;
 use std::fmt;
 use std::process::exit;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
+
+static LSP_MODE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 pub enum ErrorType {
@@ -55,8 +57,15 @@ impl Logger {
         ERRORS.load(Ordering::Relaxed)
     }
 
+    pub fn set_lsp_mode(enabled: bool) {
+        LSP_MODE.store(enabled, Ordering::Relaxed);
+    }
+
     pub fn error(msg: &str, loc: Option<Loc>, err: ErrorType) {
         ERRORS.fetch_add(1, Ordering::Relaxed);
+        if LSP_MODE.load(Ordering::Relaxed) {
+            return;
+        }
         let sources = SOURCES.lock().unwrap();
         let active = ACTIVE.lock().unwrap().last().copied();
         let source = loc

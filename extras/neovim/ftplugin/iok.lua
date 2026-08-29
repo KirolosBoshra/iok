@@ -9,13 +9,5 @@ vim.bo.shiftwidth = 2
 vim.bo.tabstop = 2
 vim.bo.softtabstop = 2
 
--- Try starting the built-in LSP client if the iok-lsp binary is available
-local binary = "iok-lsp"
-if vim.fn.executable(binary) == 1 then
-  vim.lsp.start({
-    name = "iok-lsp",
-    cmd = { binary },
-    root_dir = vim.fs.dirname(vim.fs.find({ "Cargo.toml", ".git" }, { upward = true })[1]) or vim.fn.getcwd(),
-    settings = {},
-  })
-end
+-- LSP is started via require("iok").setup() in lua/iok/init.lua
+-- (removed auto-start here to avoid duplicate clients + lsp.log spam)
