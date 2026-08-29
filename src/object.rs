@@ -10,6 +10,8 @@ use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
 use lazy_static::lazy_static;
 use libloading::Library;
 use rustc_hash::FxHashMap;
+use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::{fmt, ops::BitOr, os::raw::c_void, rc::Rc};
 
@@ -27,6 +29,13 @@ lazy_static! {
     pub static ref M_LOWER: u32 = intern("to_lower");
     pub static ref M_TO_NUMBER: u32 = intern("to_number");
     pub static ref M_REPLACE: u32 = intern("replace");
+    pub static ref M_KEYS: u32 = intern("keys");
+    pub static ref M_VALUES: u32 = intern("values");
+    pub static ref M_HAS: u32 = intern("has");
+    pub static ref M_GET: u32 = intern("get");
+    pub static ref M_SET: u32 = intern("set");
+    pub static ref M_DELETE: u32 = intern("delete");
+    pub static ref M_CLEAR: u32 = intern("clear");
 }
 
 #[derive(Clone)]
@@ -35,6 +44,7 @@ pub enum Object {
     Number(f64),
     Bool(bool),
     List(Vec<Object>),
+    Dict(Rc<RefCell<FxHashMap<Object, Object>>>),
     Range(f64, f64),
     Ret(Box<Object>),
     File(FileHandler),
@@ -106,8 +116,17 @@ impl Object {
             Object::Number(num) => *num != 0.0,
             Object::Bool(b) => *b,
             Object::List(list) => !list.is_empty(),
+            Object::Dict(d) => !d.borrow().is_empty(),
             _ => false,
         }
+    }
+
+    #[inline]
+    pub fn is_hashable(&self) -> bool {
+        matches!(
+            self,
+            Object::Null | Object::Bool(_) | Object::Number(_) | Object::String(_)
+        )
     }
 
     #[inline]
@@ -187,6 +206,7 @@ impl Object {
         match self {
             Object::String(str) => str.len(),
             Object::List(list) => list.len(),
+            Object::Dict(d) => d.borrow().len(),
             _ => 0,
         }
     }
@@ -304,6 +324,75 @@ impl Object {
                 }
                 Object::Null
             }
+            id if id == *M_KEYS => {
+                if let Object::Dict(d) = self {
+                    return Object::List(d.borrow().keys().cloned().collect());
+                }
+                Object::Null
+            }
+            id if id == *M_VALUES => {
+                if let Object::Dict(d) = self {
+                    return Object::List(d.borrow().values().cloned().collect());
+                }
+                Object::Null
+            }
+            id if id == *M_HAS => {
+                if let Object::Dict(d) = self {
+                    if let Some(k) = args.first() {
+                        if !k.is_hashable() {
+                            return Object::Bool(false);
+                        }
+                        return Object::Bool(d.borrow().contains_key(k));
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_GET => {
+                if let Object::Dict(d) = self {
+                    if let Some(k) = args.first() {
+                        if !k.is_hashable() {
+                            return Object::Null;
+                        }
+                        return d.borrow().get(k).cloned().unwrap_or(Object::Null);
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_SET => {
+                if let Object::Dict(d) = self {
+                    if let (Some(k), Some(v)) = (args.get(0), args.get(1)) {
+                        if !k.is_hashable() {
+                            Logger::error(
+                                "Dict key must be null/bool/number/string",
+                                Some(loc),
+                                ErrorType::RunTime,
+                            );
+                            return Object::Null;
+                        }
+                        d.borrow_mut().insert(k.clone(), v.clone());
+                        return v.clone();
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_DELETE => {
+                if let Object::Dict(d) = self {
+                    if let Some(k) = args.first() {
+                        if !k.is_hashable() {
+                            return Object::Bool(false);
+                        }
+                        return Object::Bool(d.borrow_mut().remove(k).is_some());
+                    }
+                }
+                Object::Null
+            }
+            id if id == *M_CLEAR => {
+                if let Object::Dict(d) = self {
+                    d.borrow_mut().clear();
+                    return Object::Null;
+                }
+                Object::Null
+            }
             _ => {
                 Logger::error(
                     &format!("Undefined method: {}", resolve(name)),
@@ -355,6 +444,7 @@ impl PartialEq for Object {
             (Object::Number(a), Object::Number(b)) => a == b,
             (Object::Bool(a), Object::Bool(b)) => a == b,
             (Object::List(a), Object::List(b)) => a == b,
+            (Object::Dict(a), Object::Dict(b)) => Rc::ptr_eq(a, b) || *a.borrow() == *b.borrow(),
             (Object::Range(a, b), Object::Range(c, d)) => a == c && b == d,
             (Object::Ret(a), Object::Ret(b)) => a == b,
             (Object::File(a), Object::File(b)) => a == b,
@@ -443,6 +533,60 @@ impl PartialEq for Object {
     }
 }
 
+impl Eq for Object {}
+
+impl Hash for Object {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Object::Null => 0.hash(state),
+            Object::Bool(b) => b.hash(state),
+            Object::Number(n) => n.to_bits().hash(state),
+            Object::String(s) => s.hash(state),
+            Object::List(l) => {
+                0x01.hash(state);
+                l.hash(state);
+            }
+            Object::Dict(d) => {
+                0x02.hash(state);
+                for (k, v) in d.borrow().iter() {
+                    k.hash(state);
+                    v.hash(state);
+                }
+            }
+            Object::Range(a, b) => {
+                a.to_bits().hash(state);
+                b.to_bits().hash(state);
+            }
+            Object::Ret(o) => o.hash(state),
+            Object::File(f) => f.path.hash(state),
+            Object::Socket(s) => format!("{s}").hash(state),
+            Object::Fn { name, args, .. } => {
+                name.hash(state);
+                args.hash(state);
+            }
+            Object::NativeFn { name, .. } => name.hash(state),
+            Object::StructDef { name, .. } => name.hash(state),
+            Object::Instance { fields, .. } => {
+                // hash fields' content
+                let mut pairs: Vec<_> = fields.iter().collect();
+                pairs.sort_by_key(|(k, _)| *k);
+                for (k, v) in pairs {
+                    k.hash(state);
+                    v.hash(state);
+                }
+            }
+            Object::NameSpace { name, .. } => name.hash(state),
+            Object::Lib { path, .. } => path.hash(state),
+            Object::ForeignFn { name, .. } => name.hash(state),
+            Object::CStruct { bytes, .. } => bytes.hash(state),
+            Object::Ptr(p) => (*p as usize).hash(state),
+            Object::Invalid => 0xFE.hash(state),
+            Object::Break => 0xFD.hash(state),
+            Object::Continue => 0xFC.hash(state),
+        }
+    }
+}
+
 impl fmt::Debug for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
@@ -458,6 +602,14 @@ impl fmt::Display for Object {
             Object::List(list) => {
                 let list_str: Vec<String> = list.iter().map(|obj| obj.to_string()).collect();
                 write!(f, "[{}]", list_str.join(", "))
+            }
+            Object::Dict(d) => {
+                let map = d.borrow();
+                let pairs: Vec<String> = map
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect();
+                write!(f, "{{{}}}", pairs.join(", "))
             }
             Object::Range(s, e) => write!(f, "{s}..{e}"),
             Object::Ret(o) => write!(f, "Ret({o})"),
@@ -510,6 +662,7 @@ impl Not for Object {
             Object::Bool(b) => !b,
             Object::String(string) => string.is_empty(),
             Object::List(list) => list.is_empty(),
+            Object::Dict(d) => d.borrow().is_empty(),
             Object::Null => true,
             _ => false,
         }

@@ -83,6 +83,7 @@ pub enum Tree {
         path: Box<Node>,
         alias: Option<u32>,
     },
+    Dict(Vec<(Node, Node)>),
 }
 
 pub struct Parser {
@@ -651,6 +652,49 @@ impl Parser {
                     let items = self.parse_items(iter);
                     Node {
                         tree: Tree::List(items),
+                        loc: it.loc,
+                    }
+                }
+                TokenType::OpenCurly => {
+                    // bare {} is Dict, `S {}` with Ident prefix is handled as StructInit earlier
+                    let mut pairs = Vec::new();
+                    if let Some(peek) = iter.peek() {
+                        if peek.token == TokenType::CloseCurly {
+                            iter.next();
+                            return Node {
+                                tree: Tree::Dict(pairs),
+                                loc: it.loc,
+                            };
+                        }
+                    }
+                    loop {
+                        let key = self.parse_expression(iter);
+                        if self.expect_token(iter, TokenType::Colon).is_none() {
+                            break;
+                        }
+                        let value = self.parse_expression(iter);
+                        pairs.push((key, value));
+                        match iter.peek().map(|t| &t.token) {
+                            Some(TokenType::Comma) => {
+                                iter.next();
+                                continue;
+                            }
+                            Some(TokenType::CloseCurly) => {
+                                iter.next();
+                                break;
+                            }
+                            _ => {
+                                Logger::error(
+                                    "Expected , or } in dict literal",
+                                    Some(it.loc),
+                                    ErrorType::Parsing,
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    Node {
+                        tree: Tree::Dict(pairs),
                         loc: it.loc,
                     }
                 }

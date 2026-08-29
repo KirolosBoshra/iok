@@ -8,6 +8,7 @@ use crate::{
 use core::iter::Iterator;
 use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
+use std::cell::RefCell;
 use std::{env, fs::File, io::Read, path::Path, rc::Rc};
 
 // default dir name for std libs
@@ -269,27 +270,32 @@ impl Interpreter {
         use TokenType::*;
 
         match op {
-            Plus => match (left, right) {
-                (Number(l), Number(r)) => Number(l + r),
-                (Number(l), String(r)) => String(Rc::new(format!("{l}{r}"))),
-
-                (String(mut l), String(r)) => {
-                    Rc::make_mut(&mut l).push_str(&r);
-                    Object::String(l)
+            Plus => {
+                if matches!(&left, Object::Dict(_)) || matches!(&right, Object::Dict(_)) {
+                    return String(Rc::new(format!("{}{}", left, right)));
                 }
-                (String(l), r) => String(Rc::new(format!("{l}{r}"))),
+                match (left, right) {
+                    (Number(l), Number(r)) => Number(l + r),
+                    (Number(l), String(r)) => String(Rc::new(format!("{l}{r}"))),
 
-                (List(mut l), List(ref mut r)) => {
-                    l.append(r);
-                    List(l)
-                }
+                    (String(mut l), String(r)) => {
+                        Rc::make_mut(&mut l).push_str(&r);
+                        Object::String(l)
+                    }
+                    (String(l), r) => String(Rc::new(format!("{l}{r}"))),
 
-                (List(mut l), r) => {
-                    l.push(r);
-                    List(l)
+                    (List(mut l), List(ref mut r)) => {
+                        l.append(r);
+                        List(l)
+                    }
+
+                    (List(mut l), r) => {
+                        l.push(r);
+                        List(l)
+                    }
+                    _ => Null,
                 }
-                _ => Null,
-            },
+            }
             Minus => match (left, right) {
                 (Number(l), Number(r)) => Number(l - r),
 
@@ -402,6 +408,23 @@ impl Interpreter {
                 });
                 Object::List(buf)
             }
+            Tree::Dict(pairs) => {
+                let map = Rc::new(RefCell::new(FxHashMap::default()));
+                for (k_node, v_node) in pairs {
+                    let k = self.interpret(k_node);
+                    let v = self.interpret(v_node);
+                    if !k.is_hashable() {
+                        Logger::error(
+                            "Dict key must be null/bool/number/string",
+                            Some(node.loc),
+                            ErrorType::RunTime,
+                        );
+                        continue;
+                    }
+                    map.borrow_mut().insert(k, v);
+                }
+                Object::Dict(map)
+            }
             Tree::Ident(var) => self
                 .get_var(var)
                 .cloned()
@@ -416,11 +439,27 @@ impl Interpreter {
                 Object::Invalid
             }
             Tree::ListCall(var, index) => {
-                let index_num = self.interpret(index).to_f64() as usize;
+                let key = self.interpret(index);
+                // Dict get: d["a"] / d[1] where key is any hashable object
                 if let Some(var_obj) = self.interpret_mut(var) {
-                    var_obj.get_list_index(index_num)
+                    if let Object::Dict(d) = var_obj {
+                        if !key.is_hashable() {
+                            return Object::Null;
+                        }
+                        return d.borrow().get(&key).cloned().unwrap_or(Object::Null);
+                    }
+                    let index_num = key.to_f64() as usize;
+                    return var_obj.get_list_index(index_num);
                 } else {
-                    self.interpret(var).get_list_index(index_num)
+                    let obj = self.interpret(var);
+                    if let Object::Dict(d) = &obj {
+                        if !key.is_hashable() {
+                            return Object::Null;
+                        }
+                        return d.borrow().get(&key).cloned().unwrap_or(Object::Null);
+                    }
+                    let index_num = key.to_f64() as usize;
+                    return obj.get_list_index(index_num);
                 }
             }
             Tree::ImmCall { callee, args } => {
@@ -485,10 +524,22 @@ impl Interpreter {
                         }
                     }
                     Tree::ListCall(var, index) => {
-                        let index_num = self.interpret(&index).to_f64() as usize;
-
+                        let key = self.interpret(&index);
                         if let Some(var_obj) = self.interpret_mut(&var) {
-                            var_obj.set_list_index(index_num, value_obj.clone());
+                            if let Object::Dict(d) = var_obj {
+                                if !key.is_hashable() {
+                                    Logger::error(
+                                        "Dict key must be null/bool/number/string",
+                                        Some(node.loc),
+                                        ErrorType::RunTime,
+                                    );
+                                } else {
+                                    d.borrow_mut().insert(key, value_obj.clone());
+                                }
+                            } else {
+                                let index_num = key.to_f64() as usize;
+                                var_obj.set_list_index(index_num, value_obj.clone());
+                            }
                         }
                     }
                     Tree::MemberAccess { target, member } => {
@@ -502,6 +553,11 @@ impl Interpreter {
                                         Some(node.loc),
                                     );
                                     *slot = updated;
+                                }
+                            } else if let Object::Dict(d) = slot {
+                                if let Tree::Ident(name) = &member.tree {
+                                    let key = Object::String(Rc::new(resolve(*name)));
+                                    d.borrow_mut().insert(key, value_obj.clone());
                                 }
                             } else if let Tree::Ident(name) = &member.tree {
                                 if let Some(field) = slot.get_field_mut(name) {
@@ -751,6 +807,14 @@ impl Interpreter {
                         if matches!(target_object, Object::CStruct { .. }) {
                             return ffi::struct_field(&target_object, *name);
                         }
+                        if let Object::Dict(d) = &target_object {
+                            // d.a sugar -> d["a"] if not a method
+                            let key = Object::String(Rc::new(resolve(*name)));
+                            if let Some(v) = d.borrow().get(&key) {
+                                return v.clone();
+                            }
+                            return Object::Null;
+                        }
                         if let Object::NameSpace {
                             name: mod_name,
                             ref namespace,
@@ -777,9 +841,9 @@ impl Interpreter {
                     }
 
                     Tree::FnCall { name, args } => {
-                        let on_simple_var = self
-                            .interpret_mut(target)
-                            .is_some_and(|t| matches!(t, Object::String(_) | Object::List(_)));
+                        let on_simple_var = self.interpret_mut(target).is_some_and(|t| {
+                            matches!(t, Object::String(_) | Object::List(_) | Object::Dict(_))
+                        });
                         if on_simple_var {
                             let arg_objs: Vec<Object> =
                                 args.iter().map(|a| self.interpret(a)).collect();
@@ -790,7 +854,10 @@ impl Interpreter {
                         }
 
                         let mut target_object = self.interpret(target);
-                        if let Object::String(_) | Object::List(_) = &target_object {
+                        if let Object::String(_)
+                        | Object::List(_)
+                        | Object::Dict(_) = &target_object
+                        {
                             let arg_objs: Vec<Object> =
                                 args.iter().map(|a| self.interpret(a)).collect();
                             return target_object.simple_method(*name, &arg_objs, node.loc);

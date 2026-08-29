@@ -1,0 +1,83 @@
+// Dict tour - creation, access, mutation, iteration
+// Run: ./target/release/iok --std ./std/ ./examples/dict.iok
+
+import std::io
+
+io::println("--- creation")
+let d = {"a": 1, "b": 2}
+write("d -> ")
+write(d)
+write("\n")
+write("{} -> ")
+write({})
+write("\n")
+if {} {
+  write("{} truthy\n")
+} els {
+  write("{} empty falsey -> true\n")
+}
+if d {
+  write("d truthy -> true\n")
+}
+
+io::println("--- [] and . sugar")
+io::println("d[\"a\"] -> " + d["a"])
+io::println("d.b -> " + d.b)
+d["c"] = 3
+write("after d[\"c\"] = 3 -> ")
+write(d)
+write("\n")
+d.d = 4
+write("after d.d = 4 -> ")
+write(d)
+write("\n")
+io::println("miss d[\"z\"] -> " + d["z"])
+
+io::println("--- object keys (1 vs \"1\")")
+let m = {1: "one", true: "yes", null: "nil"}
+io::println("m[1] -> " + m[1])
+io::println("m[\"1\"] -> " + m["1"])
+io::println("m[true] -> " + m[true])
+io::println("m[null] -> " + m[null])
+
+io::println("--- methods")
+io::println("len -> " + d.len())
+io::println("keys -> " + d.keys())
+io::println("values -> " + d.values())
+io::println("has a -> " + d.has("a"))
+io::println("has z -> " + d.has("z"))
+io::println("get a -> " + d.get("a"))
+d.set("e", 5)
+write("after set e=5 -> ")
+write(d)
+write("\n")
+io::println("delete a -> " + d.delete("a"))
+write("after delete -> ")
+write(d)
+write("\n")
+io::println("has a now -> " + d.has("a"))
+
+io::println("--- iteration via keys()/values()")
+for k -> d.keys() {
+  io::println(k + ":" + d[k])
+}
+for v -> d.values() {
+  write(v + " ")
+}
+io::println("")
+
+io::println("--- mutation is reference")
+fn add_foo(map) => {
+  map["foo"] = "bar"
+}
+let d2 = {"x": 1}
+add_foo(d2)
+write("d2 after fn -> ")
+write(d2)
+write("\n")
+
+io::println("--- clear")
+d.clear()
+write("after clear len " + d.len() + " -> ")
+write(d)
+write("\n")
