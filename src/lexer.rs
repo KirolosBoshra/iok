@@ -52,6 +52,7 @@ pub enum TokenType {
     EquEqu,
     Bang,
     NotEqu,
+    Query,
     Greater,
     Less,
     GreatEqu,
@@ -359,6 +360,13 @@ impl<'a> Lexer<'a> {
                 '~' => {
                     tokens.push(Token {
                         token: TokenType::BitNot,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
+                }
+                '?' => {
+                    tokens.push(Token {
+                        token: TokenType::Query,
                         loc: self.curr_loc,
                     });
                     self.next();

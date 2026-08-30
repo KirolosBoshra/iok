@@ -320,6 +320,18 @@ impl DocumentAnalysis {
                 }
             }
             Tree::CmpOp(_, _, _) => Type::Bool,
+            Tree::Ternary {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                let t = self.infer_type(then_branch);
+                if t != Type::Unknown {
+                    t
+                } else {
+                    self.infer_type(else_branch)
+                }
+            }
             Tree::FnCall { name, args: _ } => {
                 let fname = resolve(*name);
                 if fname == "chr" || fname == "readline" {

@@ -474,6 +474,17 @@ impl Interpreter {
                 let right_obj = self.interpret(right);
                 self.bin_op(left_obj, op, right_obj)
             }
+            Tree::Ternary {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
+                if self.interpret(cond).to_bool() {
+                    self.interpret(then_branch)
+                } else {
+                    self.interpret(else_branch)
+                }
+            }
             Tree::CmpOp(left, op, right) => {
                 // && / || short-circuit: skip right side when left decides
                 match op {

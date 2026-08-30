@@ -39,6 +39,11 @@ pub enum Tree {
     BinOp(Box<Node>, TokenType, Box<Node>),
     CmpOp(Box<Node>, TokenType, Box<Node>),
     Range(Box<Node>, Box<Node>),
+    Ternary {
+        cond: Box<Node>,
+        then_branch: Box<Node>,
+        else_branch: Box<Node>,
+    },
     Let(u32, Box<Node>),
     Assign(Box<Node>, Box<Node>),
     If {
@@ -179,11 +184,8 @@ impl Parser {
             | TokenType::MultiplyEqu
             | TokenType::DivideEqu
             | TokenType::PercentEqu
-            | TokenType::PowerEqu
-            | TokenType::BitAnd
-            | TokenType::BitOR
-            | TokenType::Shl
-            | TokenType::Shr => (1, true),
+            | TokenType::PowerEqu => (1, true),
+            TokenType::BitAnd | TokenType::BitOR | TokenType::Shl | TokenType::Shr => (1, false),
             TokenType::Or => (2, false),
             TokenType::And => (3, false),
             TokenType::EquEqu
@@ -259,6 +261,49 @@ impl Parser {
             }
 
             let Some(op) = iter.peek() else { break };
+            // Ternary `? :` – prec 1, right-assoc, lower than `||`/`&&`
+            if op.token == TokenType::Query {
+                if 1 < min_prec {
+                    break;
+                }
+                let query_loc = op.loc;
+                iter.next(); // consume ?
+                let then_branch = self.parse_expression(iter);
+                if self.expect_token(iter, TokenType::Colon).is_none() {
+                    let else_branch = Node {
+                        tree: Tree::Empty(),
+                        loc: query_loc,
+                    };
+                    left = Node {
+                        tree: Tree::Ternary {
+                            cond: Box::new(left),
+                            then_branch: Box::new(then_branch),
+                            else_branch: Box::new(else_branch),
+                        },
+                        loc: query_loc,
+                    };
+                    self.prev_token = Token {
+                        token: TokenType::Query,
+                        loc: query_loc,
+                    };
+                    continue;
+                }
+                // else is right-assoc at same prec -> `a?b:c?d:e` => `a?b:(c?d:e)` ; use parse_expression to allow `..`/etc inside branch
+                let else_branch = self.parse_expression(iter);
+                left = Node {
+                    tree: Tree::Ternary {
+                        cond: Box::new(left),
+                        then_branch: Box::new(then_branch),
+                        else_branch: Box::new(else_branch),
+                    },
+                    loc: query_loc,
+                };
+                self.prev_token = Token {
+                    token: TokenType::Query,
+                    loc: query_loc,
+                };
+                continue;
+            }
             let Some((prec, right_assoc)) = Self::binop_prec(&op.token) else {
                 break;
             };
@@ -612,9 +657,9 @@ impl Parser {
                             clone.next(); // skip the `{`
                             let is_struct_syntax = match clone.next().map(|t| &t.token) {
                                 Some(TokenType::CloseCurly) => true, // S {} empty literal
-                                Some(TokenType::Ident(_)) => clone
-                                    .next()
-                                    .is_some_and(|t| t.token == TokenType::Colon),
+                                Some(TokenType::Ident(_)) => {
+                                    clone.next().is_some_and(|t| t.token == TokenType::Colon)
+                                }
                                 _ => false,
                             };
 
