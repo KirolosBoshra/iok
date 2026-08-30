@@ -159,7 +159,11 @@ impl Parser {
                         loc: op_loc,
                     };
                 }
-                TokenType::BitAnd | TokenType::BitOR | TokenType::Shl | TokenType::Shr => {
+                TokenType::BitAnd
+                | TokenType::BitOR
+                | TokenType::BitXor
+                | TokenType::Shl
+                | TokenType::Shr => {
                     iter.next();
                     let right = self.parse_expression(iter);
                     left = Node {
@@ -185,7 +189,11 @@ impl Parser {
             | TokenType::DivideEqu
             | TokenType::PercentEqu
             | TokenType::PowerEqu => (1, true),
-            TokenType::BitAnd | TokenType::BitOR | TokenType::Shl | TokenType::Shr => (1, false),
+            TokenType::BitAnd
+            | TokenType::BitOR
+            | TokenType::BitXor
+            | TokenType::Shl
+            | TokenType::Shr => (1, false),
             TokenType::Or => (2, false),
             TokenType::And => (3, false),
             TokenType::EquEqu

@@ -61,6 +61,7 @@ pub enum TokenType {
     And,
     BitOR,
     Or,
+    BitXor,
     Shl,
     Shr,
     OpenParen,
@@ -488,6 +489,13 @@ impl<'a> Lexer<'a> {
                             loc: self.curr_loc,
                         }),
                     }
+                }
+                '^' => {
+                    tokens.push(Token {
+                        token: TokenType::BitXor,
+                        loc: self.curr_loc,
+                    });
+                    self.next();
                 }
                 '.' => {
                     self.next();

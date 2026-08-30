@@ -6,7 +6,7 @@ use crate::logger::{ErrorType, Logger};
 use crate::parser::Node;
 use crate::socket::Socket;
 use crate::std_native::NativeFn;
-use core::ops::{AddAssign, BitAnd, Not, Shl, Shr};
+use core::ops::{AddAssign, BitAnd, BitXor, Not, Shl, Shr};
 use lazy_static::lazy_static;
 use libloading::Library;
 use rustc_hash::FxHashMap;
@@ -605,10 +605,7 @@ impl fmt::Display for Object {
             }
             Object::Dict(d) => {
                 let map = d.borrow();
-                let pairs: Vec<String> = map
-                    .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v))
-                    .collect();
+                let pairs: Vec<String> = map.iter().map(|(k, v)| format!("{}: {}", k, v)).collect();
                 write!(f, "{{{}}}", pairs.join(", "))
             }
             Object::Range(s, e) => write!(f, "{s}..{e}"),
@@ -734,6 +731,16 @@ impl Shr for Object {
             (Object::Number(l), Object::Number(r)) => {
                 Object::Number(((l as i32) >> (r as i32)) as f64)
             }
+            _ => Object::Invalid,
+        }
+    }
+}
+impl BitXor for Object {
+    type Output = Object;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Object::Number(l), Object::Number(r)) => Object::Number((l as i64 ^ r as i64) as f64),
+            (Object::Bool(l), Object::Bool(r)) => Object::Bool(l ^ r),
             _ => Object::Invalid,
         }
     }

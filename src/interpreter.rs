@@ -350,6 +350,7 @@ impl Interpreter {
             },
             BitAnd => left & right,
             BitOR => left | right,
+            BitXor => left ^ right,
             Shl => left << right,
             Shr => left >> right,
             _ => Invalid,
@@ -865,9 +866,8 @@ impl Interpreter {
                         }
 
                         let mut target_object = self.interpret(target);
-                        if let Object::String(_)
-                        | Object::List(_)
-                        | Object::Dict(_) = &target_object
+                        if let Object::String(_) | Object::List(_) | Object::Dict(_) =
+                            &target_object
                         {
                             let arg_objs: Vec<Object> =
                                 args.iter().map(|a| self.interpret(a)).collect();
